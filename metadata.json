@@ -1,0 +1,8 @@
+{
+  "name": "Chord Practice",
+  "description": "Application personnelle d'entraînement aux accords au piano et clavier MIDI, avec sessions guidées, mode progression et suivi local.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
