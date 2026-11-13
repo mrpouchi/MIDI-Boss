@@ -1,4 +1,15 @@
-import { ArrowRight, CheckCircle2, Lock, Play, Sliders, Usb } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  CircleDot,
+  Lock,
+  Music2,
+  Play,
+  Sparkles,
+  Sliders,
+  Target,
+  Usb,
+} from 'lucide-react';
 import { MidiState } from '../../input/types';
 import {
   GUIDED_SONGS,
@@ -46,6 +57,12 @@ export function TodayScreen({
   const goalChords = settings.dailyGoalChords;
   const goalPercent = Math.min(100, Math.round((todayChords / goalChords) * 100));
   const goalReached = todayChords >= goalChords;
+  const reviewItems = microLesson.items.filter((item) => item.context === 'isolated').length;
+  const newItems = microLesson.items.filter((item) => item.isNewConcept).length;
+  const songItems = microLesson.items.filter((item) => item.context === 'progression').length;
+  const completedSongCount = GUIDED_SONGS.filter((song) =>
+    song.availableSteps.every((step) => songProgress[song.id]?.completedSteps.includes(step)),
+  ).length;
 
   const formattedDate = new Intl.DateTimeFormat('fr-FR', {
     weekday: 'long',
@@ -73,8 +90,15 @@ export function TodayScreen({
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      {/* Hero Focal Anchor — Micro-leçon adaptative du jour */}
-      <section className="rounded-2xl border border-stone-200 bg-white p-6 sm:p-10 dark:border-slate-800 dark:bg-[#151c2f]">
+      {/* Hero Focal Anchor — an achievable, adaptive daily lesson */}
+      <section className="duo-card overflow-hidden shadow-[0_5px_0_0_var(--duo-swan)]">
+        <div className="border-b-2 border-[var(--duo-green-soft)] bg-[var(--duo-green-soft)] px-6 py-3 text-xs font-black tracking-wide text-[var(--duo-eel)] sm:px-10">
+          <span className="inline-flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            Une seule petite victoire à la fois
+          </span>
+        </div>
+        <div className="p-6 sm:p-10">
         <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
           <div className="max-w-2xl">
             <p className="text-xs font-medium capitalize text-stone-500 dark:text-slate-400">
@@ -82,7 +106,7 @@ export function TodayScreen({
               <span aria-hidden="true" className="mx-2">
                 ·
               </span>
-              <span>Leçon adaptative ~4 min</span>
+              <span>Leçon adaptative · ~4 min</span>
               {isDemoData && (
                 <>
                   <span aria-hidden="true" className="mx-2">
@@ -92,19 +116,19 @@ export function TodayScreen({
                 </>
               )}
             </p>
-            <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl dark:text-slate-100">
+            <h1 className="duo-title mt-2 text-3xl sm:text-4xl">
               {microLesson.label}
             </h1>
-            <p className="mt-3 text-base leading-relaxed text-stone-600 dark:text-slate-300">
-              {microLesson.goalDescription} Chaque morceau commence à un doigt
-              (fondamentale seule), puis ajoute la quinte, la tierce et les extensions.
+            <p className="duo-copy mt-3 text-base">
+              {microLesson.goalDescription} D’abord le repère, ensuite le geste,
+              puis la musique : votre clavier valide chaque étape au bon moment.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={() => onStartPractice(microLesson)}
-                className="inline-flex items-center gap-2.5 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                className="duo-button duo-button-primary duo-focus px-6 py-3.5"
               >
                 <Play className="h-4 w-4 fill-current" aria-hidden="true" />
                 <span>Commencer la leçon du jour</span>
@@ -113,7 +137,7 @@ export function TodayScreen({
               <button
                 type="button"
                 onClick={onOpenConfigurer}
-                className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="duo-button duo-button-outline duo-focus px-4 py-3"
               >
                 <Sliders className="h-4 w-4" aria-hidden="true" />
                 <span>Session libre ou suite</span>
@@ -125,7 +149,7 @@ export function TodayScreen({
           <div className="shrink-0 space-y-2 rounded-xl border border-stone-200/90 bg-stone-50/70 px-4 py-3.5 text-xs dark:border-slate-800 dark:bg-slate-900/50">
             <div className="flex items-center gap-2 font-medium text-stone-800 dark:text-slate-200">
               <Usb
-                className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400"
+                className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400"
                 aria-hidden="true"
               />
               <span>
@@ -143,11 +167,12 @@ export function TodayScreen({
             </p>
           </div>
         </div>
+        </div>
       </section>
 
       {/* Daily Goal + Spaced Repetition Rhythm */}
       <div className="grid gap-6 md:grid-cols-2">
-        <section className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="duo-card flex flex-col justify-between p-6">
           <div>
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
@@ -167,7 +192,7 @@ export function TodayScreen({
             >
               <div
                 className={`h-full rounded-full transition-all duration-300 ${
-                  goalReached ? 'bg-emerald-500' : 'bg-indigo-600 dark:bg-indigo-400'
+                  goalReached ? 'bg-emerald-500' : 'bg-emerald-500 dark:bg-emerald-400'
                 }`}
                 style={{ width: `${goalPercent}%` }}
               />
@@ -213,53 +238,67 @@ export function TodayScreen({
           </div>
         </section>
 
-        <section className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
           <div>
-            <p className="text-xs font-medium text-indigo-600 dark:text-indigo-300">
-              Méthode progressive en 4 paliers
+            <p className="text-xs font-bold tracking-wide text-emerald-600 dark:text-emerald-300">
+              La boucle d’apprentissage
             </p>
             <h2 className="mt-1.5 font-display text-lg font-semibold text-stone-900 dark:text-slate-100">
-              Jouer dès le premier jour, même sans notion de piano
+              Voir, essayer, retrouver — puis jouer
             </h2>
-            <div className="mt-4 grid grid-cols-2 gap-2.5 text-xs text-stone-600 dark:text-slate-300">
-              <div className="rounded-xl border border-stone-200/80 bg-stone-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-                <span className="font-semibold text-stone-900 dark:text-slate-100">
-                  1 · Fondamentale
-                </span>
-                <p className="mt-0.5 text-[11px] opacity-80">1 note pour suivre le morceau</p>
+            <div className="mt-5 space-y-3 text-xs text-stone-600 dark:text-slate-300">
+              <div className="flex items-center gap-3">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-100 font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">1</span>
+                <span><strong className="text-stone-900 dark:text-slate-100">Découvrir</strong> · le clavier montre un nouveau geste.</span>
               </div>
-              <div className="rounded-xl border border-stone-200/80 bg-stone-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-                <span className="font-semibold text-stone-900 dark:text-slate-100">
-                  2 · Fond. + Quinte
-                </span>
-                <p className="mt-0.5 text-[11px] opacity-80">2 doigts stables (1 + 5)</p>
+              <div className="flex items-center gap-3">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 font-semibold text-violet-700 dark:bg-violet-950 dark:text-violet-200">2</span>
+                <span><strong className="text-stone-900 dark:text-slate-100">Rappeler</strong> · vous rejouez sans indice les gestes fragiles.</span>
               </div>
-              <div className="rounded-xl border border-stone-200/80 bg-stone-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-                <span className="font-semibold text-stone-900 dark:text-slate-100">
-                  3 · Triade
-                </span>
-                <p className="mt-0.5 text-[11px] opacity-80">Majeur, mineur, sus2, sus4</p>
-              </div>
-              <div className="rounded-xl border border-stone-200/80 bg-stone-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
-                <span className="font-semibold text-stone-900 dark:text-slate-100">
-                  4 · Extensions (7e)
-                </span>
-                <p className="mt-0.5 text-[11px] opacity-80">Accords complets & renversements</p>
+              <div className="flex items-center gap-3">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-100 font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">3</span>
+                <span><strong className="text-stone-900 dark:text-slate-100">Mettre en musique</strong> · les accords reviennent dans une vraie suite.</span>
               </div>
             </div>
           </div>
         </section>
       </div>
 
-      {/* Parcours Chansons — Étape par étape */}
+      {/* Lesson anatomy makes the adaptive choices legible before practice. */}
+      <section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 dark:border-slate-800 dark:bg-[#151c2f]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold tracking-wide text-emerald-600 dark:text-emerald-300">Avant de commencer</p>
+            <h2 className="mt-1 font-display text-lg font-semibold text-stone-900 dark:text-slate-100">Votre leçon en {microLesson.items.length} mini-défis</h2>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-600 dark:bg-slate-900 dark:text-slate-300">
+            <Target className="h-3.5 w-3.5" aria-hidden="true" />
+            Objectif : jouer, pas mémoriser un écran
+          </span>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {[
+            { icon: CircleDot, count: newItems, label: 'nouveau geste', tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-200' },
+            { icon: Target, count: reviewItems, label: 'rappel ciblé', tone: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40 dark:text-violet-200' },
+            { icon: Music2, count: songItems, label: 'accords en musique', tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-200' },
+          ].map(({ icon: Icon, count, label, tone }) => (
+            <div key={label} className="flex items-center gap-3 rounded-xl border border-stone-200/80 p-3 dark:border-slate-800">
+              <span className={`grid h-9 w-9 place-items-center rounded-lg ${tone}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
+              <span><strong className="block font-mono-tabular text-base text-stone-900 dark:text-slate-100">{count}</strong><span className="text-xs text-stone-500 dark:text-slate-400">{label}</span></span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Course map: musical outcomes rather than an undifferentiated content library. */}
       <section className="rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
-              Chansons guidées — Étape par étape
+              Votre parcours au piano
             </h2>
             <p className="mt-0.5 text-xs text-stone-500 dark:text-slate-400">
-              Chaque chanson démarre à l’étape 1 (fondamentale) et débloque le palier suivant à {STEP_XP_TARGET} XP.
+              {completedSongCount > 0 ? `${completedSongCount} morceau${completedSongCount > 1 ? 'x' : ''} consolidé${completedSongCount > 1 ? 's' : ''}. ` : ''}Chaque morceau débloque son geste suivant à {STEP_XP_TARGET} XP.
             </p>
           </div>
           <button
@@ -314,9 +353,9 @@ export function TodayScreen({
                             isDone
                               ? 'bg-emerald-500'
                               : isCurrent
-                                ? 'bg-indigo-600 dark:bg-indigo-400'
+                                ? 'bg-emerald-500 dark:bg-emerald-400'
                                 : unlocked
-                                  ? 'bg-indigo-300 dark:bg-indigo-800'
+                                  ? 'bg-emerald-300 dark:bg-emerald-800'
                                   : 'bg-stone-200 dark:bg-slate-700'
                           }`}
                         />
@@ -337,7 +376,7 @@ export function TodayScreen({
                     <button
                       type="button"
                       onClick={() => handleStartSong(song)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-300"
+                      className="inline-flex items-center gap-1 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-extrabold text-emerald-700 transition-colors hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
                     >
                       <span>Jouer</span>
                       <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

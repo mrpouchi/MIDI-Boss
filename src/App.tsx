@@ -4,6 +4,7 @@ import { CODE_TO_MIDI } from './input/keyboardMap';
 import { WebMidiController } from './input/midi';
 import { MidiState } from './input/types';
 import { VoicingStep } from './music/chords';
+import { decodeIrealSong, IrealSong } from './music/ireal';
 import {
   GUIDED_SONGS,
   STEP_XP_TARGET,
@@ -24,10 +25,12 @@ import {
   SongProgress,
   SpacedCard,
   StoredData,
+  StoredMidiSetup,
 } from './storage/types';
 import { SettingsDrawer } from './ui/components/SettingsDrawer';
 import { AppTab, TopNav } from './ui/components/TopNav';
 import { PlayScreen } from './ui/screens/PlayScreen';
+import { LibraryScreen } from './ui/screens/LibraryScreen';
 import { ProgressScreen } from './ui/screens/ProgressScreen';
 import { TodayScreen } from './ui/screens/TodayScreen';
 
@@ -70,7 +73,28 @@ export default function App() {
   useEffect(() => {
     pianoSynth.setEnabled(storedData.settings.audioEnabled);
     pianoSynth.setVolume(storedData.settings.audioVolume);
-  }, [storedData.settings.audioEnabled, storedData.settings.audioVolume]);
+    if (storedData.settings.audioEnabled) {
+      pianoSynth.setInstrument(storedData.settings.instrument ?? 'piano');
+    }
+  }, [
+    storedData.settings.audioEnabled,
+    storedData.settings.audioVolume,
+    storedData.settings.instrument,
+  ]);
+
+  // Débloque la sortie audio dès le premier geste plutôt qu'à la première note :
+  // évite une note initiale en retard et réduit la latence perçue ensuite.
+  useEffect(() => {
+    const prime = () => pianoSynth.primeFromGesture();
+    window.addEventListener('pointerdown', prime, { capture: true });
+    window.addEventListener('keydown', prime, { capture: true });
+    window.addEventListener('touchstart', prime, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', prime, { capture: true });
+      window.removeEventListener('keydown', prime, { capture: true });
+      window.removeEventListener('touchstart', prime, { capture: true });
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new WebMidiController();
@@ -249,6 +273,42 @@ export default function App() {
     setActiveTab('play');
   }, []);
 
+  const handleImportIrealLibrary = useCallback((songs: IrealSong[]) => {
+    setStoredData((prev) => ({
+      ...prev,
+      isDemoData: false,
+      irealLibrary: songs,
+    }));
+  }, []);
+
+  const handleSaveMidiSetup = useCallback((key: string, setup: StoredMidiSetup) => {
+    setStoredData((prev) => ({
+      ...prev,
+      midiSetups: {
+        ...(prev.midiSetups ?? {}),
+        [key]: setup,
+      },
+    }));
+  }, []);
+
+  const handleStartIrealSong = useCallback(async (song: IrealSong) => {
+    const chords = await decodeIrealSong(song);
+    if (!chords.length) throw new Error('La grille ne contient aucun accord praticable.');
+    setLaunchConfig({
+      mode: 'progression',
+      label: song.title,
+      rawInput: `${song.title} · ${song.composer}`,
+      chords,
+      step: 'root',
+      tempoBpm: 120,
+      beatsPerChord: 4,
+      loopCount: 0,
+    });
+    setLaunchInConfigMode(false);
+    setPlaySessionKey((key) => key + 1);
+    setActiveTab('play');
+  }, []);
+
   const handleRecordSongStepXp = useCallback(
     (
       songId: string,
@@ -414,7 +474,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#faf8f5] text-stone-900 transition-colors duration-200 dark:bg-[#0f1422] dark:text-slate-100">
+    <div className="duo-shell min-h-screen transition-colors duration-200">
       <TopNav
         activeTab={activeTab}
         onSelectTab={(tab) => {
@@ -433,6 +493,16 @@ export default function App() {
             midiState={midiState}
             onStartPractice={handleStartPractice}
             onOpenConfigurer={handleOpenConfigurer}
+          />
+        )}
+
+        {activeTab === 'library' && (
+          <LibraryScreen
+            songs={storedData.irealLibrary ?? []}
+            midiSetups={storedData.midiSetups ?? {}}
+            onImport={handleImportIrealLibrary}
+            onPlay={handleStartIrealSong}
+            onSaveMidiSetup={handleSaveMidiSetup}
           />
         )}
 

@@ -1,8 +1,41 @@
+import { Soundfont } from 'smplr';
+import type { InstrumentId } from '../storage/types';
+
 interface ActiveVoice {
   osc1: OscillatorNode;
   osc2: OscillatorNode;
   gain: GainNode;
   filter: BiquadFilterNode;
+}
+
+export interface InstrumentDefinition {
+  id: InstrumentId;
+  label: string;
+  soundfont: string;
+  loop?: boolean;
+}
+
+export const INSTRUMENTS: InstrumentDefinition[] = [
+  { id: 'piano', label: 'Piano acoustique', soundfont: 'acoustic_grand_piano' },
+  { id: 'rhodes', label: 'Piano électrique (Rhodes)', soundfont: 'electric_piano_1' },
+  { id: 'vibraphone', label: 'Vibraphone', soundfont: 'vibraphone', loop: true },
+  { id: 'organ', label: 'Orgue jazz', soundfont: 'drawbar_organ', loop: true },
+];
+
+export type InstrumentState = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface AudioLatencyInfo {
+  baseMs: number;
+  outputMs: number;
+  totalMs: number;
+  sampleRate: number;
+}
+
+export interface InstrumentStatus {
+  id: InstrumentId;
+  state: InstrumentState;
+  loaded: number;
+  total: number;
 }
 
 function midiToFrequency(midi: number): number {
@@ -13,6 +46,17 @@ class PianoSynthEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private voices = new Map<number, ActiveVoice>();
+  private sampledVoices = new Map<number, () => void>();
+  private instrument: ReturnType<typeof Soundfont> | null = null;
+  private instrumentId: InstrumentId = 'piano';
+  private instrumentStatus: InstrumentStatus = {
+    id: 'piano',
+    state: 'idle',
+    loaded: 0,
+    total: 0,
+  };
+  private instrumentListeners = new Set<(status: InstrumentStatus) => void>();
+  private loadToken = 0;
   private enabled = true;
   private volume = 0.65;
 
@@ -30,6 +74,146 @@ class PianoSynthEngine {
     }
   }
 
+  getInstrumentStatus(): InstrumentStatus {
+    return { ...this.instrumentStatus };
+  }
+
+  /**
+   * Latence estimée de la sortie audio. `outputLatency` n'est pas disponible
+   * dans tous les navigateurs : on retombe alors sur `baseLatency`.
+   */
+  getLatencyInfo(): AudioLatencyInfo | null {
+    if (!this.ctx) return null;
+    const base = Number.isFinite(this.ctx.baseLatency) ? this.ctx.baseLatency : 0;
+    const output = Number.isFinite(this.ctx.outputLatency) ? this.ctx.outputLatency : 0;
+    return {
+      baseMs: base * 1000,
+      outputMs: output * 1000,
+      totalMs: (output > 0 ? output : base) * 1000,
+      sampleRate: this.ctx.sampleRate,
+    };
+  }
+
+  /**
+   * À appeler sur la première interaction (clic / touche). Crée le contexte si
+   * besoin et le débloque tout de suite, pour que la première note ne subisse
+   * pas le coût de démarrage de la sortie audio.
+   */
+  primeFromGesture(): void {
+    if (!this.enabled) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    if (ctx.state === 'running') return;
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+    // Un buffer silencieux débloque la sortie sur Safari / iOS.
+    try {
+      const source = ctx.createBufferSource();
+      source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch {
+      // Certains navigateurs refusent un buffer de 1 échantillon : sans effet.
+    }
+  }
+
+  subscribeInstrument(listener: (status: InstrumentStatus) => void): () => void {
+    this.instrumentListeners.add(listener);
+    listener(this.getInstrumentStatus());
+    return () => {
+      this.instrumentListeners.delete(listener);
+    };
+  }
+
+  private notifyInstrument(): void {
+    const snapshot = this.getInstrumentStatus();
+    this.instrumentListeners.forEach((listener) => listener(snapshot));
+  }
+
+  private updateInstrumentStatus(status: InstrumentStatus): void {
+    this.instrumentStatus = status;
+    this.notifyInstrument();
+  }
+
+  setInstrument(id: InstrumentId): void {
+    const alreadyLoading =
+      this.instrumentStatus.state === 'loading' && this.instrumentStatus.id === id;
+    if (alreadyLoading) return;
+    if (this.instrument && this.instrumentStatus.id === id && this.instrumentStatus.state === 'ready') {
+      return;
+    }
+
+    this.instrumentId = id;
+    this.loadToken += 1;
+    const token = this.loadToken;
+
+    this.stopAll();
+    this.disposeInstrument();
+
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) {
+      this.updateInstrumentStatus({ id, state: 'error', loaded: 0, total: 0 });
+      return;
+    }
+
+    const definition = INSTRUMENTS.find((item) => item.id === id) ?? INSTRUMENTS[0];
+    this.updateInstrumentStatus({ id, state: 'loading', loaded: 0, total: 0 });
+
+    // Les échantillons viennent de la banque MIDI.js (MusyngKite) : aucun
+    // serveur local n'est nécessaire. Le contexte peut rester suspendu tant
+    // que l'utilisateur n'a pas interagi ; le décodage des samples fonctionne.
+    const instrument = Soundfont(ctx, {
+      instrument: definition.soundfont,
+      kit: 'MusyngKite',
+      destination: this.masterGain,
+      volume: 127,
+      loadLoopData: definition.loop ?? false,
+      onLoadProgress: ({ loaded, total }) => {
+        if (
+          token !== this.loadToken ||
+          this.instrumentStatus.state === 'ready' ||
+          this.instrumentStatus.state === 'error'
+        ) {
+          return;
+        }
+        this.updateInstrumentStatus({ id, state: 'loading', loaded, total });
+      },
+    });
+    this.instrument = instrument;
+
+    instrument.ready
+      .then(() => {
+        if (token !== this.loadToken) {
+          instrument.dispose();
+          return;
+        }
+        this.updateInstrumentStatus({
+          id,
+          state: 'ready',
+          loaded: instrument.loadProgress.loaded,
+          total: instrument.loadProgress.total,
+        });
+      })
+      .catch((error: unknown) => {
+        if (token !== this.loadToken) return;
+        console.warn("Impossible de charger l'instrument échantillonné", error);
+        instrument.dispose();
+        if (this.instrument === instrument) this.instrument = null;
+        this.updateInstrumentStatus({ id, state: 'error', loaded: 0, total: 0 });
+      });
+  }
+
+  private disposeInstrument(): void {
+    if (!this.instrument) return;
+    try {
+      this.instrument.dispose();
+    } catch {
+      // L'instrument peut déjà être libéré après un changement rapide.
+    }
+    this.instrument = null;
+  }
+
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
     if (!this.ctx) {
@@ -37,7 +221,14 @@ class PianoSynthEngine {
         window.AudioContext ||
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return null;
-      this.ctx = new AudioCtx();
+      try {
+        // 0 = plus petit buffer de sortie possible (Chrome : ~32 ms au lieu de
+        // ~40 ms sur les haut-parleurs internes). Une valeur non zéro est
+        // ignorée par certains navigateurs, d'où le repli explicite.
+        this.ctx = new AudioCtx({ latencyHint: 0 });
+      } catch {
+        this.ctx = new AudioCtx({ latencyHint: 'interactive' });
+      }
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this.volume * 0.45;
       this.masterGain.connect(this.ctx.destination);
@@ -54,6 +245,19 @@ class PianoSynthEngine {
     if (!ctx || !this.masterGain) return;
 
     this.noteOff(midi);
+
+    // Une fois l'instrument échantillonné prêt, il remplace le synthé à
+    // oscillateurs. Pendant le chargement (ou en cas d'échec réseau), on garde
+    // le son de secours pour que le clavier reste jouable.
+    if (this.instrument && this.instrumentStatus.state === 'ready') {
+      try {
+        const stop = this.instrument.start({ note: midi, velocity });
+        this.sampledVoices.set(midi, stop);
+        return;
+      } catch {
+        // Retombe sur le synthé à oscillateurs si l'échantillon est indisponible.
+      }
+    }
 
     const now = ctx.currentTime;
     const freq = midiToFrequency(midi);
@@ -94,6 +298,16 @@ class PianoSynthEngine {
   }
 
   noteOff(midi: number): void {
+    const stopSample = this.sampledVoices.get(midi);
+    if (stopSample) {
+      try {
+        stopSample();
+      } catch {
+        // La voix échantillonnée peut déjà être terminée.
+      }
+      this.sampledVoices.delete(midi);
+    }
+
     const voice = this.voices.get(midi);
     if (!voice || !this.ctx) return;
 
@@ -111,6 +325,19 @@ class PianoSynthEngine {
   }
 
   stopAll(): void {
+    this.sampledVoices.forEach((stop) => {
+      try {
+        stop();
+      } catch {
+        // Voix déjà terminée.
+      }
+    });
+    this.sampledVoices.clear();
+    try {
+      this.instrument?.stop();
+    } catch {
+      // Instrument en cours de libération.
+    }
     Array.from(this.voices.keys()).forEach((midi) => this.noteOff(midi));
   }
 

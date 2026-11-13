@@ -3,21 +3,47 @@
 
 @layer base {
   :root {
-    --font-display: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-    --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+    /* Adapted from the public Duolingo references — original implementation. */
+    --duo-green: #58cc02;
+    --duo-green-press: #46a302;
+    --duo-green-soft: #d7ffb8;
+    --duo-blue: #1cb0f6;
+    --duo-blue-press: #1899d6;
+    --duo-yellow: #ffc800;
+    --duo-red: #ff4b4b;
+    --duo-orange: #ff9600;
+    --duo-purple: #ce82ff;
+    --duo-eel: #4b4b4b;
+    --duo-wolf: #777777;
+    --duo-hare: #afafaf;
+    --duo-swan: #e5e5e5;
+    --duo-polar: #f7f7f7;
+    --duo-snow: #ffffff;
+    --duo-radius: 18px;
+    --duo-radius-small: 12px;
+    --duo-shadow-green: 0 4px 0 var(--duo-green-press);
+    --duo-shadow-blue: 0 4px 0 var(--duo-blue-press);
+    --duo-shadow-neutral: 0 3px 0 #d6d6d6;
+    --font-display: "Nunito", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+    --font-sans: "Nunito", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   }
 
   html {
     font-family: var(--font-sans);
-    background-color: #faf8f5;
-    color: #1c1917;
+    background-color: var(--duo-snow);
+    color: var(--duo-eel);
     color-scheme: light;
   }
 
   html.dark {
-    background-color: #0f1422;
-    color: #eef2ff;
+    --duo-snow: #131f24;
+    --duo-polar: #202f36;
+    --duo-eel: #f1f7fb;
+    --duo-wolf: #a3b4bd;
+    --duo-swan: #37464f;
+    background-color: var(--duo-snow);
+    color: var(--duo-eel);
     color-scheme: dark;
   }
 
@@ -34,6 +60,39 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+@layer components {
+  .duo-shell { background: var(--duo-snow); color: var(--duo-eel); }
+  .duo-card { border: 2px solid var(--duo-swan); border-radius: var(--duo-radius); background: var(--duo-snow); }
+  .duo-card-soft { border: 2px solid var(--duo-swan); border-radius: var(--duo-radius); background: var(--duo-polar); }
+  .duo-eyebrow { color: var(--duo-blue); font-size: .75rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+  .duo-title { font-family: var(--font-display); font-weight: 900; letter-spacing: -.035em; line-height: 1.05; color: var(--duo-eel); }
+  .duo-copy { color: var(--duo-wolf); line-height: 1.45; }
+  .duo-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    border: 0; border-radius: var(--duo-radius-small); padding: .8rem 1.15rem;
+    font-family: var(--font-sans); font-size: .82rem; font-weight: 900;
+    letter-spacing: .045em; text-transform: uppercase; transition: transform 100ms ease, filter 100ms ease;
+  }
+  .duo-button:hover { filter: brightness(1.035); }
+  .duo-button:active { transform: translateY(3px); box-shadow: none; }
+  .duo-button:focus-visible, .duo-focus:focus-visible { outline: 3px solid var(--duo-blue); outline-offset: 3px; }
+  .duo-button:disabled { cursor: not-allowed; filter: grayscale(.35); opacity: .5; box-shadow: none; }
+  .duo-button-primary { background: var(--duo-green); box-shadow: var(--duo-shadow-green); color: white; }
+  .duo-button-secondary { background: var(--duo-blue); box-shadow: var(--duo-shadow-blue); color: white; }
+  .duo-button-outline { border: 2px solid var(--duo-swan); background: var(--duo-snow); box-shadow: var(--duo-shadow-neutral); color: var(--duo-wolf); }
+  .duo-pill { border-radius: 999px; font-size: .72rem; font-weight: 900; letter-spacing: .04em; }
+  .duo-progress { height: 14px; overflow: hidden; border-radius: 999px; background: var(--duo-swan); }
+  .duo-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--duo-green); transition: width 300ms ease; }
+  .duo-pressable { transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease; }
+  .duo-pressable:hover { transform: translateY(-1px); }
+  .duo-pressable:active { transform: translateY(1px); }
+  .duo-pop { animation: duo-pop 260ms cubic-bezier(.2,.9,.25,1.2) both; }
+  .duo-celebrate { animation: duo-celebrate 520ms cubic-bezier(.2,.9,.25,1.1) both; }
+}
+
+@keyframes duo-pop { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes duo-celebrate { 0% { transform: scale(.92); } 55% { transform: scale(1.045); } 100% { transform: scale(1); } }
 
 @media (prefers-reduced-motion: reduce) {
   *,

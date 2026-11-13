@@ -124,10 +124,10 @@ export function SessionConfigPanel({
     : VOICING_STEP_ORDER;
 
   return (
-    <div className="mx-auto max-w-3xl rounded-2xl border border-stone-200 bg-white p-6 sm:p-8 dark:border-slate-800 dark:bg-[#151c2f]">
+    <div className="duo-card mx-auto max-w-3xl p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-5 dark:border-slate-800">
         <div>
-          <h2 className="font-display text-xl font-semibold text-stone-900 dark:text-slate-100">
+          <h2 className="duo-title text-xl">
             Configurer votre entraînement
           </h2>
           <p className="mt-1 text-sm text-stone-500 dark:text-slate-400">

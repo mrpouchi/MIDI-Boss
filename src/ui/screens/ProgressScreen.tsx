@@ -93,11 +93,11 @@ export function ProgressScreen({
 
   if (!hasData) {
     return (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-stone-200 bg-white p-10 text-center dark:border-slate-800 dark:bg-[#151c2f]">
-        <h1 className="font-display text-2xl font-semibold text-stone-900 dark:text-slate-100">
+      <div className="duo-card mx-auto max-w-3xl p-10 text-center">
+        <h1 className="duo-title text-2xl">
           Aucune séance enregistrée pour le moment
         </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm text-stone-600 dark:text-slate-300">
+        <p className="duo-copy mx-auto mt-2 max-w-md text-sm">
           Terminez votre première leçon ou session pour voir apparaître vos accords
           maîtrisés, vos révisions espacées et votre progression par chanson.
         </p>
@@ -114,7 +114,7 @@ export function ProgressScreen({
               durationMinutes: 5,
             })
           }
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-500"
+          className="duo-button duo-button-primary duo-focus mt-6"
         >
           <span>Commencer à l’étape 1 (Fondamentales)</span>
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -127,7 +127,7 @@ export function ProgressScreen({
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-stone-900 sm:text-3xl dark:text-slate-100">
+          <h1 className="duo-title text-2xl sm:text-3xl">
             Progression personnelle
           </h1>
           <p className="mt-1 text-sm text-stone-500 dark:text-slate-400">
@@ -165,7 +165,7 @@ export function ProgressScreen({
                 'Accords à travailler',
               )
             }
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+            className="duo-button duo-button-primary duo-focus"
           >
             <span>Travailler les accords fragiles</span>
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -175,7 +175,7 @@ export function ProgressScreen({
 
       {/* Three Mastery Cards */}
       <div className="grid gap-5 md:grid-cols-3">
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="duo-card p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
               <Award className="h-4 w-4" aria-hidden="true" />

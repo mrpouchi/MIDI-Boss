@@ -1,7 +1,8 @@
 import { RefreshCw, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { INSTRUMENTS, pianoSynth } from '../../audio/synth';
 import { MidiState } from '../../input/types';
-import { AppSettings } from '../../storage/types';
+import { AppSettings, InstrumentId } from '../../storage/types';
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -29,6 +30,20 @@ export function SettingsDrawer({
   onClearAllData,
 }: SettingsDrawerProps) {
   const [confirmReset, setConfirmReset] = useState(false);
+  const [instrumentStatus, setInstrumentStatus] = useState(() =>
+    pianoSynth.getInstrumentStatus(),
+  );
+  const [latency, setLatency] = useState(() => pianoSynth.getLatencyInfo());
+
+  useEffect(() => pianoSynth.subscribeInstrument(setInstrumentStatus), []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLatency(pianoSynth.getLatencyInfo());
+    // `outputLatency` se précise une fois le contexte réellement démarré.
+    const id = window.setInterval(() => setLatency(pianoSynth.getLatencyInfo()), 1000);
+    return () => window.clearInterval(id);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -152,7 +167,7 @@ export function SettingsDrawer({
 
             <label className="flex cursor-pointer items-center justify-between gap-3">
               <span className="text-sm text-stone-800 dark:text-slate-200">
-                Synthétiseur piano doux (Web Audio)
+                Son des notes jouées (Web Audio)
               </span>
               <input
                 type="checkbox"
@@ -184,6 +199,47 @@ export function SettingsDrawer({
               </div>
             )}
 
+            {settings.audioEnabled && (
+              <div>
+                <div className="flex items-center justify-between text-xs text-stone-500 dark:text-slate-400">
+                  <span>Instrument</span>
+                  <span className="font-mono-tabular text-[11px]">
+                    {instrumentStatus.state === 'loading'
+                      ? `Chargement ${instrumentStatus.total > 0 ? `${instrumentStatus.loaded}/${instrumentStatus.total}` : '…'}`
+                      : instrumentStatus.state === 'ready'
+                        ? 'Son chargé'
+                        : instrumentStatus.state === 'error'
+                          ? 'Échec du chargement'
+                          : ''}
+                  </span>
+                </div>
+                <select
+                  value={settings.instrument ?? 'piano'}
+                  onChange={(e) =>
+                    onUpdateSettings({ instrument: e.target.value as InstrumentId })
+                  }
+                  className="mt-2 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-200"
+                >
+                  {INSTRUMENTS.map((instrument) => (
+                    <option key={instrument.id} value={instrument.id}>
+                      {instrument.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-[11px] text-stone-500 dark:text-slate-400">
+                  Sons échantillonnés chargés à la demande (MIDI.js MusyngKite).
+                  Le synthé de secours prend le relais pendant le chargement.
+                </p>
+                {latency && (
+                  <p className="mt-1 text-[11px] text-stone-500 dark:text-slate-400">
+                    Latence de sortie estimée : ~{Math.round(latency.totalMs)} ms
+                    {latency.outputMs === 0 ? ' (estimation du navigateur)' : ''}.
+                    Une sortie Bluetooth ajoute souvent 100 à 300 ms.
+                  </p>
+                )}
+              </div>
+            )}
+
             <label className="flex cursor-pointer items-center justify-between gap-3">
               <span className="text-sm text-stone-800 dark:text-slate-200">
                 Métronome léger en mode progression
@@ -195,6 +251,25 @@ export function SettingsDrawer({
                   onUpdateSettings({ metronomeEnabled: e.target.checked })
                 }
                 className="h-4 w-4 rounded accent-indigo-600"
+              />
+            </label>
+
+            <label className="flex cursor-pointer items-start justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 dark:border-emerald-950/70 dark:bg-emerald-950/20">
+              <span>
+                <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+                  Écouter puis reproduire
+                </span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-stone-500 dark:text-slate-400">
+                  Joue l’accord modèle, affiche le geste sur le clavier, puis vous laisse le reproduire.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.listenAndRepeatEnabled}
+                onChange={(e) =>
+                  onUpdateSettings({ listenAndRepeatEnabled: e.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 shrink-0 rounded accent-emerald-600"
               />
             </label>
 

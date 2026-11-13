@@ -1,13 +1,19 @@
 import { ChordFamily, NotationSystem, VoicingStep } from '../music/chords';
+import { IrealSong } from '../music/ireal';
 
 export type ThemeMode = 'dark' | 'light';
+
+export type InstrumentId = 'piano' | 'rhodes' | 'vibraphone' | 'organ';
 
 export interface AppSettings {
   theme: ThemeMode;
   notation: NotationSystem;
   audioEnabled: boolean;
   audioVolume: number;
+  instrument: InstrumentId;
   metronomeEnabled: boolean;
+  /** Beginner flow: hear each target first, then reproduce it on the keyboard. */
+  listenAndRepeatEnabled: boolean;
   showKeyboardHelper: boolean;
   showKeyboardNotes: boolean;
   dailyGoalChords: number;
@@ -47,6 +53,18 @@ export interface SongProgress {
   lastPracticedAt: string;
 }
 
+export interface MidiSongSetup {
+  presets: Record<string, string>;
+  volumes: Record<string, number>;
+}
+
+export interface StoredMidiSetup {
+  fileName: string;
+  size: number;
+  updatedAt: string;
+  setup: MidiSongSetup;
+}
+
 export interface SessionRecord {
   id: string;
   date: string;
@@ -70,4 +88,6 @@ export interface StoredData {
   spacedCards: Record<string, SpacedCard>;
   songProgress: Record<string, SongProgress>;
   sessions: SessionRecord[];
+  irealLibrary?: IrealSong[];
+  midiSetups?: Record<string, StoredMidiSetup>;
 }

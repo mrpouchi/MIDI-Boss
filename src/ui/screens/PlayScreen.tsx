@@ -182,8 +182,17 @@ export function PlayScreen({
   });
   const [showChordNotesText, setShowChordNotesText] = useState(false);
   const [latchMode, setLatchMode] = useState(() => midiState.status !== 'connected');
+  const [imitationState, setImitationState] = useState<'listen' | 'play'>(() =>
+    settings.listenAndRepeatEnabled ? 'listen' : 'play',
+  );
+  const [lessonReadyToAdvance, setLessonReadyToAdvance] = useState(false);
+  // A completed chord must be released before the next challenge can validate.
+  // Without this gate, a sustained MIDI chord can accidentally solve matching targets.
+  const [awaitingRelease, setAwaitingRelease] = useState(false);
 
   const isTransitioningRef = useRef(false);
+  const activeChallengeRef = useRef('');
+  const resolvedChallengeRef = useRef<string | null>(null);
   const attemptsRef = useRef<AttemptRecord[]>([]);
   const elapsedRef = useRef(0);
   const requeuedCountRef = useRef<Record<string, number>>({});
@@ -228,6 +237,7 @@ export function PlayScreen({
       setJustUnlockedStep(null);
 
       setCurrentIndex(0);
+      resolvedChallengeRef.current = null;
       setLoopNumber(1);
       setAttempts([]);
       attemptsRef.current = [];
@@ -245,11 +255,14 @@ export function PlayScreen({
       setCurrentBeat(0);
       setValidatedInCurrentBar(false);
       setShowExpectedHelper(Boolean(builtQueue[0]?.isNewConcept));
+      setImitationState(settings.listenAndRepeatEnabled ? 'listen' : 'play');
+      setAwaitingRelease(false);
+      setLessonReadyToAdvance(false);
       isTransitioningRef.current = false;
       onClearVirtualLatchNotes();
       setPhase('active');
     },
-    [onClearVirtualLatchNotes, songProgress],
+    [onClearVirtualLatchNotes, settings.listenAndRepeatEnabled, songProgress],
   );
 
   // Sync when launched from TodayScreen or ProgressScreen
@@ -275,6 +288,15 @@ export function PlayScreen({
       ? activeConfig.songId
       : undefined;
   const activeSong = getSongById(activeSongId);
+  const challengeKey = currentItem && currentChord
+    ? `${currentIndex}:${currentChord.id}:${activeStep}`
+    : '';
+
+  // Keep asynchronous validation tied to the card that created it. A stale
+  // timeout must never be allowed to record or advance a later card.
+  useEffect(() => {
+    activeChallengeRef.current = challengeKey;
+  }, [challengeKey]);
 
   // Auto-toggle helper guide on new concepts vs active recall review in Lesson mode
   useEffect(() => {
@@ -283,6 +305,28 @@ export function PlayScreen({
       setShowChordNotesText(Boolean(currentItem.isNewConcept));
     }
   }, [activeConfig.mode, currentIndex, currentItem]);
+
+  // The model sound always comes before the user's turn.  This makes the first
+  // encounter an imitation exercise instead of a text-only chord quiz.
+  useEffect(() => {
+    if (phase !== 'active' || !currentChord) return;
+    if (!settings.listenAndRepeatEnabled) {
+      setImitationState('play');
+      return;
+    }
+
+    setImitationState('listen');
+    setShowExpectedHelper(true);
+    setShowChordNotesText(true);
+    const preview = window.setTimeout(() => {
+      pianoSynth.playChordPreview(getSuggestedVoicingMidi(currentChord, 4, activeStep));
+    }, 120);
+    const ready = window.setTimeout(() => setImitationState('play'), 1150);
+    return () => {
+      window.clearTimeout(preview);
+      window.clearTimeout(ready);
+    };
+  }, [activeStep, currentChord, currentIndex, phase, settings.listenAndRepeatEnabled]);
 
   const finishSession = useCallback(
     (finalAttempts?: AttemptRecord[]) => {
@@ -487,6 +531,14 @@ export function PlayScreen({
     if (phase !== 'active' || !currentChord || !currentItem || !validation) return;
     if (isTransitioningRef.current) return;
 
+    if (awaitingRelease) {
+      if (activeNotes.length === 0) setAwaitingRelease(false);
+      return;
+    }
+
+    // During the demonstration, never score accidental key presses.
+    if (imitationState === 'listen') return;
+
     if (validation.hasWrongNotes && activeNotes.length > 0) {
       setHadWrongNoteOnCurrent(true);
       setFeedback('wrong-note');
@@ -511,10 +563,32 @@ export function PlayScreen({
       return;
     }
 
+    const scheduledChallenge = challengeKey;
+    if (
+      !scheduledChallenge ||
+      resolvedChallengeRef.current === scheduledChallenge
+    ) {
+      return;
+    }
+
+    // Lock synchronously, before React has a chance to re-run this effect for
+    // another MIDI event from the same held chord.
+    isTransitioningRef.current = true;
     const timer = window.setTimeout(() => {
-      if (isTransitioningRef.current) return;
+      if (
+        activeChallengeRef.current !== scheduledChallenge ||
+        resolvedChallengeRef.current === scheduledChallenge
+      ) {
+        isTransitioningRef.current = false;
+        return;
+      }
       const recheck = validateChordInput(activeNotes, currentChord, activeStep);
-      if (!recheck.isComplete) return;
+      if (!recheck.isComplete) {
+        isTransitioningRef.current = false;
+        return;
+      }
+
+      resolvedChallengeRef.current = scheduledChallenge;
 
       const responseMs = Math.max(120, Date.now() - chordStartMs);
       const record: AttemptRecord = {
@@ -530,6 +604,7 @@ export function PlayScreen({
       attemptsRef.current = nextAttempts;
       setAttempts(nextAttempts);
       setFeedback('success');
+      setAwaitingRelease(true);
 
       awardStepXp(!hadWrongNoteOnCurrent);
 
@@ -550,10 +625,18 @@ export function PlayScreen({
         }
       }
 
+      // Daily lessons deliberately use an explicit next action. It gives a
+      // beginner time to hear the success, release their hand, and understand
+      // what was just played; it also makes cascading MIDI validation impossible.
+      if (activeConfig.mode === 'lesson') {
+        setLessonReadyToAdvance(true);
+        isTransitioningRef.current = false;
+        return;
+      }
+
       if (activeConfig.mode === 'progression') {
         setValidatedInCurrentBar(true);
         if (repeatCurrentChord) {
-          isTransitioningRef.current = true;
           window.setTimeout(() => {
             onClearVirtualLatchNotes();
             setFeedback('idle');
@@ -561,11 +644,13 @@ export function PlayScreen({
             setChordStartMs(Date.now());
             isTransitioningRef.current = false;
           }, 520);
+        } else {
+          // The bar timer owns the next transition in progression mode.
+          isTransitioningRef.current = false;
         }
         return;
       }
 
-      isTransitioningRef.current = true;
       window.setTimeout(() => {
         onClearVirtualLatchNotes();
         setFeedback('idle');
@@ -582,19 +667,32 @@ export function PlayScreen({
       }, 480);
     }, 75);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      // If the user changed the held notes during the short confirmation
+      // window, the scheduled validation was cancelled and the card stays live.
+      if (
+        resolvedChallengeRef.current !== scheduledChallenge &&
+        activeChallengeRef.current === scheduledChallenge
+      ) {
+        isTransitioningRef.current = false;
+      }
+    };
   }, [
     activeConfig.mode,
     activeNotes,
     activeStep,
     awardStepXp,
     chordStartMs,
+    challengeKey,
     currentChord,
     currentIndex,
     currentItem,
     feedback,
     finishSession,
     hadWrongNoteOnCurrent,
+    awaitingRelease,
+    imitationState,
     onClearVirtualLatchNotes,
     phase,
     queue.length,
@@ -607,6 +705,7 @@ export function PlayScreen({
   const handleSkipChord = () => {
     if (!currentChord || !currentItem || isTransitioningRef.current) return;
     isTransitioningRef.current = true;
+    resolvedChallengeRef.current = challengeKey || null;
     const record: AttemptRecord = {
       chord: currentChord,
       step: activeStep,
@@ -644,6 +743,8 @@ export function PlayScreen({
       setFeedback('idle');
       setRequeueNotice(false);
       setHadWrongNoteOnCurrent(false);
+      setAwaitingRelease(false);
+      setLessonReadyToAdvance(false);
       setChordStartMs(Date.now());
       setCurrentBeat(0);
       setValidatedInCurrentBar(false);
@@ -655,6 +756,33 @@ export function PlayScreen({
         setCurrentIndex((i) => (i + 1) % nextLength);
       }
     }, 340);
+  };
+
+  const handleContinueLesson = () => {
+    if (
+      activeConfig.mode !== 'lesson' ||
+      !lessonReadyToAdvance ||
+      activeNotes.length > 0 ||
+      isTransitioningRef.current
+    ) {
+      return;
+    }
+
+    isTransitioningRef.current = true;
+    setLessonReadyToAdvance(false);
+    setFeedback('idle');
+    setRequeueNotice(false);
+    setHadWrongNoteOnCurrent(false);
+    setAwaitingRelease(false);
+    setChordStartMs(Date.now());
+
+    if (currentIndex + 1 >= queue.length) {
+      finishSession(attemptsRef.current);
+      return;
+    }
+
+    setCurrentIndex((index) => index + 1);
+    isTransitioningRef.current = false;
   };
 
   const handleSwitchStepInProgression = (stepId: VoicingStep) => {
@@ -669,6 +797,8 @@ export function PlayScreen({
     setFeedback('idle');
     setValidatedInCurrentBar(false);
     setHadWrongNoteOnCurrent(false);
+    setAwaitingRelease(false);
+    resolvedChallengeRef.current = null;
     setCurrentIndex(0);
     setCurrentBeat(0);
     onClearVirtualLatchNotes();
@@ -999,6 +1129,8 @@ export function PlayScreen({
                       setCurrentBeat(0);
                       setValidatedInCurrentBar(false);
                       setFeedback('idle');
+                      setAwaitingRelease(true);
+                      setLessonReadyToAdvance(false);
                     }}
                     className={`rounded-lg px-3 py-1.5 font-display text-sm font-semibold transition-colors ${
                       isCurrent
@@ -1090,6 +1222,22 @@ export function PlayScreen({
 
         {/* Central Chord Display */}
         <div className="flex flex-col items-center text-center">
+          {settings.listenAndRepeatEnabled && (
+            <div
+              className={`mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+                imitationState === 'listen'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'
+                  : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200'
+              }`}
+              aria-live="polite"
+            >
+              {imitationState === 'listen' ? (
+                <><Volume2 className="h-3.5 w-3.5" aria-hidden="true" /> Étape 1 · Écoutez et regardez le clavier</>
+              ) : (
+                <><Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /> Étape 2 · À vous de reproduire</>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-stone-500 dark:text-slate-400">
             <span className="text-indigo-600 dark:text-indigo-300">{stepLabel}</span>
             <span aria-hidden="true">·</span>
@@ -1157,7 +1305,9 @@ export function PlayScreen({
               <div className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 <span>
-                  {requeueNotice
+                  {lessonReadyToAdvance
+                    ? 'Accord validé — relâchez, puis continuez'
+                    : requeueNotice
                     ? 'Validé — on le reverra en fin de leçon pour le fixer'
                     : 'Accord validé'}
                 </span>
@@ -1183,7 +1333,11 @@ export function PlayScreen({
             )}
             {feedback === 'idle' && (
               <p className="text-sm text-stone-500 dark:text-slate-400">
-                {activeStep === 'root'
+                {awaitingRelease
+                  ? 'Relâchez toutes les touches avant le prochain accord'
+                  : imitationState === 'listen'
+                    ? 'Écoutez la couleur de l’accord et observez les touches éclairées'
+                    : activeStep === 'root'
                   ? 'Appuyez simplement sur la note fondamentale (n’importe quelle octave)'
                   : activeStep === 'root-5th'
                     ? 'Jouez la fondamentale et sa quinte ensemble'
@@ -1194,6 +1348,17 @@ export function PlayScreen({
 
           {/* Secondary Utility Actions */}
           <div className="mt-5 flex items-center gap-3">
+            {activeConfig.mode === 'lesson' && lessonReadyToAdvance && (
+              <button
+                type="button"
+                disabled={activeNotes.length > 0}
+                onClick={handleContinueLesson}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
+              >
+                <span>{activeNotes.length > 0 ? 'Relâchez les touches' : 'Continuer'}</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => pianoSynth.playChordPreview(expectedVoicing)}

@@ -16,7 +16,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notation: 'intl',
   audioEnabled: true,
   audioVolume: 0.65,
+  instrument: 'piano',
   metronomeEnabled: false,
+  listenAndRepeatEnabled: true,
   showKeyboardHelper: true,
   showKeyboardNotes: true,
   dailyGoalChords: 20,
@@ -317,6 +319,8 @@ export function loadStoredData(): StoredData {
       spacedCards: parsed.spacedCards ?? {},
       songProgress: parsed.songProgress ?? {},
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      irealLibrary: Array.isArray(parsed.irealLibrary) ? parsed.irealLibrary : [],
+      midiSetups: parsed.midiSetups ?? {},
     };
   } catch {
     return createDemoData();
@@ -341,5 +345,7 @@ export function createEmptyData(settings: AppSettings): StoredData {
     spacedCards: {},
     songProgress: {},
     sessions: [],
+    irealLibrary: [],
+    midiSetups: {},
   };
 }
