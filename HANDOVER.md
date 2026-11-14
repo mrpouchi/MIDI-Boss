@@ -555,3 +555,11 @@ Faire valider à l’utilisateur l’écoute du mixage restauré et de la batter
 - La fondamentale est tolérée en plus (`getOptionalPitchClassesForStep`), car la main gauche peut doubler la basse. Avec l'orchestre, `PlayAlongScorer` exigeait déjà les notes cibles et acceptait toute note de l'accord.
 - Progression : une séance en notes guides ne valide que l'objectif « Les notes guides », et l'inverse aussi (`stepCovers` dans `songProgress.ts`). Objectif ajouté à chaque morceau entre « La septième » et « Au tempo original », sauf Maiden Voyage (accords sus).
 - Découverte : `getNewIntervalsForStep` marque la tierce et la septième comme nouvelles ; texte dans `STEP_INTROS.guides`.
+
+## Transposition dans les 12 tons (14 novembre 2026)
+
+- Réglage « Tonalité » dans la colonne de droite de l'écran de réglages : − / + par demi-ton, de −5 à +6, avec un lien « originale ». Gardé par morceau dans `settings.songTranspose[songTitleKey]`, noté dans `PlayAlongRun.transpose`.
+- Grille : `sourceChart` = la grille telle qu'écrite, qui sert à caler l'orchestre (`alignFormStart`, `alignedChoruses`). `chart` = `transposeChart(sourceChart, transpose, writtenKey)` sert à l'affichage, à la découverte et au jugement.
+- Tonalité écrite : la clé iReal (`parseIrealKey`, « C- » = do mineur), à défaut le dernier accord (`chartKey`). Les fondamentales sont réécrites en bémols dans les tonalités à bémols (F, B♭, E♭, A♭, D♭, G♭ et C ; Dm, Gm, Cm, Fm, B♭m, E♭m et Am), en dièses sinon.
+- Orchestre : `transposeMidi` décale toutes les notes sauf le canal 10 (batterie), appliqué dans `prepareRun` (exercice et « Écouter le morceau »).
+- Mise en page : libellés de tempo raccourcis (« Lent · 96 », unité dans le titre) et « Calage du son » sur une ligne, pour garder l'écran sans défilement avec 5 étapes et 3 choix de tours.

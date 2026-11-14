@@ -25,6 +25,8 @@ export interface AppSettings {
   bandSounds?: Record<string, Record<string, string>>;
   /** Band parts muted per song: song title key → MIDI channels (0–15). */
   bandMuted?: Record<string, number[]>;
+  /** Key chosen per song: song title key → semitones from the written key (−5 … +6). */
+  songTranspose?: Record<string, number>;
 }
 
 export interface ChordStat {
@@ -93,6 +95,8 @@ export interface PlayAlongRun {
   id: string;
   date: string;
   songTitle: string;
+  /** Semitones from the written key, when the run was transposed. */
+  transpose?: number;
   step: VoicingStep;
   bpm: number;
   /** Tempo of the original file, to tell slow / medium / original runs apart. */

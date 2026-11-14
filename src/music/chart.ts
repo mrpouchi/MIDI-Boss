@@ -248,3 +248,76 @@ export function chartBarRoots(chart: ChordChart): number[] {
   }
   return out;
 }
+
+const FLAT_SPELLING: ChartChord['rootSpelling'][] = [
+  ['C', 'natural'], ['D', 'flat'], ['D', 'natural'], ['E', 'flat'], ['E', 'natural'], ['F', 'natural'],
+  ['G', 'flat'], ['G', 'natural'], ['A', 'flat'], ['A', 'natural'], ['B', 'flat'], ['B', 'natural'],
+].map(([letter, accidental]) => ({ letter, accidental: accidental as 'flat' | 'natural' }));
+const SHARP_SPELLING: ChartChord['rootSpelling'][] = [
+  ['C', 'natural'], ['C', 'sharp'], ['D', 'natural'], ['D', 'sharp'], ['E', 'natural'], ['F', 'natural'],
+  ['F', 'sharp'], ['G', 'natural'], ['G', 'sharp'], ['A', 'natural'], ['A', 'sharp'], ['B', 'natural'],
+].map(([letter, accidental]) => ({ letter, accidental: accidental as 'sharp' | 'natural' }));
+
+const MINOR_FAMILIES: ChordFamily[] = ['min', 'm7', 'm7b5', 'dim', 'dim7'];
+
+/**
+ * Key of a chart, taken from its last chord (tunes almost always end on the
+ * tonic): root and whether it is minor.
+ */
+export function chartKey(chart: ChordChart): { root: number; minor: boolean } | null {
+  for (let b = chart.bars.length - 1; b >= 0; b--) {
+    const last = chart.bars[b].at(-1);
+    if (last) return { root: last.chord.root, minor: MINOR_FAMILIES.includes(last.chord.family) };
+  }
+  return null;
+}
+
+/** An iReal key ("C", "Bb", "F#-", "C-" = C minor). */
+export function parseIrealKey(key: string): { root: number; minor: boolean } | null {
+  const m = /^([A-G])([b#]?)(-?)$/.exec(key.trim());
+  if (!m) return null;
+  const natural: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const root = (natural[m[1]] + (m[2] === 'b' ? 11 : m[2] === '#' ? 1 : 0)) % 12;
+  return { root, minor: m[3] === '-' };
+}
+
+/** Flat keys (and C / A minor, written with flats in jazz): F B♭ E♭ A♭ D♭ G♭, Dm Gm Cm Fm B♭m E♭m. */
+export function keyUsesFlats(root: number, minor: boolean): boolean {
+  const pc = ((root % 12) + 12) % 12;
+  return minor ? [9, 2, 7, 0, 5, 10, 3].includes(pc) : [0, 5, 10, 3, 8, 1, 6].includes(pc);
+}
+
+/** Name of a key, e.g. "Fm", "B♭", "Sol" (French notation). */
+export function formatKey(key: { root: number; minor: boolean }, notation: 'intl' | 'fr'): string {
+  const spelling = (keyUsesFlats(key.root, key.minor) ? FLAT_SPELLING : SHARP_SPELLING)[((key.root % 12) + 12) % 12];
+  return formatChartChord({ rootSpelling: spelling, suffix: key.minor ? 'm' : '' } as ChartChord, notation);
+}
+
+/**
+ * The same chart `semitones` higher (negative = lower). Validation chords and
+ * colour tones move with it; roots are re-spelled for the new key (flats in
+ * flat keys, sharps in sharp keys).
+ */
+export function transposeChart(
+  chart: ChordChart,
+  semitones: number,
+  key: { root: number; minor: boolean } | null = chartKey(chart),
+): ChordChart {
+  const shift = ((semitones % 12) + 12) % 12;
+  if (shift === 0) return chart;
+  const spelling = key && !keyUsesFlats(key.root + shift, key.minor) ? SHARP_SPELLING : FLAT_SPELLING;
+  return {
+    ...chart,
+    bars: chart.bars.map((bar) =>
+      bar.map((item) => {
+        const root = (item.chord.root + shift) % 12;
+        return {
+          ...item,
+          chord: createChord(root, item.chord.family),
+          tensions: item.tensions.map((pc) => (pc + shift) % 12),
+          rootSpelling: spelling[root],
+        };
+      }),
+    ),
+  };
+}

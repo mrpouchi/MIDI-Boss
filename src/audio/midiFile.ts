@@ -380,6 +380,23 @@ export function prependCountIn(buffer: ArrayBuffer, bars = 1): ArrayBuffer {
   return new Uint8Array(writeMidi(parsed)).buffer;
 }
 
+/**
+ * Every pitched note `semitones` higher (negative = lower); drums (channel 10)
+ * stay put. Notes are kept inside the MIDI range.
+ */
+export function transposeMidi(buffer: ArrayBuffer, semitones: number): ArrayBuffer {
+  if (semitones === 0) return buffer;
+  const parsed = parseMidi(new Uint8Array(buffer));
+  for (const track of parsed.tracks) {
+    for (const event of track) {
+      if ((event.type === 'noteOn' || event.type === 'noteOff') && event.channel !== 9) {
+        event.noteNumber = Math.max(0, Math.min(127, event.noteNumber + semitones));
+      }
+    }
+  }
+  return new Uint8Array(writeMidi(parsed)).buffer;
+}
+
 /** Track names that hold a count-in (iReal's, or the one prependCountIn adds). */
 export const isClickTrackName = (name: string) => name.trim().toLowerCase() === 'click';
 

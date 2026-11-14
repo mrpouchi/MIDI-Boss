@@ -104,3 +104,38 @@ describe('form', () => {
     expect(chart.unsupportedJumps).toEqual(['da_capo_al_coda']);
   });
 });
+
+describe('transposeChart', () => {
+  it('moves every chord and re-spells roots for the new key', async () => {
+    const { transposeChart, chartKey, formatKey, formatChartChord } = await import('../chart');
+    const { createChord } = await import('../chords');
+    const item = (root: number, family: 'm7' | '7' | 'maj7', letter: string, accidental: 'flat' | 'sharp' | 'natural') => ({
+      chord: createChord(root, family), suffix: family === 'maj7' ? '^7' : family === '7' ? '7' : '-7', tensions: [(root + 2) % 12], beat: 1,
+      rootSpelling: { letter, accidental },
+    });
+    // ii-V-I in C: Dm7 G7 Cmaj7
+    const chart = { title: 't', beatsPerBar: 4, unsupportedJumps: [], bars: [[item(2, 'm7', 'D', 'natural')], [item(7, '7', 'G', 'natural')], [item(0, 'maj7', 'C', 'natural')]] };
+    expect(formatKey(chartKey(chart)!, 'intl')).toBe('C');
+    const up1 = transposeChart(chart, 1); // D♭: E♭m7 A♭7 D♭maj7
+    expect(up1.bars.map((b) => formatChartChord(b[0], 'intl'))).toEqual(['E♭-7', 'A♭7', 'D♭^7']);
+    expect(up1.bars[0][0].chord.root).toBe(3);
+    expect(up1.bars[0][0].tensions).toEqual([5]);
+    const up2 = transposeChart(chart, 2); // D: Em7 A7 Dmaj7
+    expect(up2.bars.map((b) => formatChartChord(b[0], 'intl'))).toEqual(['E-7', 'A7', 'D^7']);
+    const up6 = transposeChart(chart, 6); // G♭, written with flats in jazz
+    expect(up6.bars.map((b) => formatChartChord(b[0], 'intl'))).toEqual(['A♭-7', 'D♭7', 'G♭^7']);
+    const up4 = transposeChart(chart, 4); // E (sharp key): F♯m7 B7 Emaj7
+    expect(up4.bars.map((b) => formatChartChord(b[0], 'intl'))).toEqual(['F♯-7', 'B7', 'E^7']);
+    expect(transposeChart(chart, 0)).toBe(chart);
+  });
+});
+
+describe('parseIrealKey', () => {
+  it('reads major and minor iReal keys', async () => {
+    const { parseIrealKey } = await import('../chart');
+    expect(parseIrealKey('C-')).toEqual({ root: 0, minor: true });
+    expect(parseIrealKey('Bb')).toEqual({ root: 10, minor: false });
+    expect(parseIrealKey('F#-')).toEqual({ root: 6, minor: true });
+    expect(parseIrealKey('')).toBeNull();
+  });
+});

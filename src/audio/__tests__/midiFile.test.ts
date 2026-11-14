@@ -308,3 +308,21 @@ describe('removeClickTracks', () => {
     expect(kick).toMatchObject({ noteNumber: 35, deltaTime: 4 * 480 });
   });
 });
+
+describe('transposeMidi', () => {
+  it('moves pitched notes and leaves the drums alone', async () => {
+    const { parseMidi, writeMidi } = await import('midi-file');
+    const { transposeMidi } = await import('../midiFile');
+    const track = [
+      { deltaTime: 0, type: 'noteOn', channel: 0, noteNumber: 60, velocity: 90 },
+      { deltaTime: 0, type: 'noteOn', channel: 9, noteNumber: 36, velocity: 90 },
+      { deltaTime: 480, type: 'noteOff', channel: 0, noteNumber: 60, velocity: 0 },
+      { deltaTime: 0, meta: true, type: 'endOfTrack' },
+    ];
+    const file = new Uint8Array(writeMidi({ header: { format: 1, numTracks: 1, ticksPerBeat: 480 }, tracks: [track] } as never)).buffer;
+    const notes = parseMidi(new Uint8Array(transposeMidi(file, -3))).tracks[0]
+      .filter((e) => e.type === 'noteOn' || e.type === 'noteOff')
+      .map((e) => [e.channel, (e as { noteNumber: number }).noteNumber]);
+    expect(notes).toEqual([[0, 57], [9, 36], [0, 57]]);
+  });
+});

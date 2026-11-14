@@ -1,14 +1,14 @@
 import { Play, RotateCcw, Square, Volume1, Volume2, VolumeX, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackingTrack } from '../../audio/backingTrack';
-import { MidiAnalysis, isClickTrackName, alignFormStart, alignedChoruses, analyzeMidi, describeTracks, normalizePickup, prependCountIn } from '../../audio/midiFile';
+import { MidiAnalysis, isClickTrackName, transposeMidi, alignFormStart, alignedChoruses, analyzeMidi, describeTracks, normalizePickup, prependCountIn } from '../../audio/midiFile';
 import { listBandParts, auditionSound, stopAudition } from '../../audio/bandSequencer';
 import { SOUND_LIBRARY, familyOf, partLabel, resolveSound } from '../../audio/bandInstruments';
 import { songTitleKey } from '../../content/localSongs';
 import { pianoSynth } from '../../audio/synth';
 import { LocalSongFile } from '../../content/localSongs';
 import { NoteEventListener } from '../../input/types';
-import { ChartChord, ChordChart, chartBarRoots, formatChartChord } from '../../music/chart';
+import { ChartChord, ChordChart, chartBarRoots, chartKey, formatChartChord, formatKey, parseIrealKey, transposeChart } from '../../music/chart';
 import {
   NotationSystem,
   VOICING_STEPS,
@@ -99,7 +99,8 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   const { localSong, irealSong, settings, onUpdateSettings, activeNotes, subscribeNoteEvents } = props;
   const notation = settings.notation;
 
-  const [chart, setChart] = useState<ChordChart | null>(null);
+  // The chart as written; `chart` below is the one played (transposed).
+  const [sourceChart, setChart] = useState<ChordChart | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
   // Every run starts by showing the song's chords calmly (new notion first).
   const [phase, setPhase] = useState<Phase>('discover');
@@ -232,6 +233,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
         date: new Date().toISOString(),
         songTitle: localSong.title,
         step: runStep,
+        ...(transpose !== 0 ? { transpose } : {}),
         bpm,
         originalBpm: runOriginalBpm,
         total: sum.total,
@@ -283,17 +285,32 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   // arrangement (found by matching its bass with the chart).
   const formStartBar = useMemo(() => {
     if (!midiInfo) return 0;
-    if (midiInfo.iReal || !chart || !midiBufferRef.current) return midiInfo.firstMusicBar;
-    return alignFormStart(midiBufferRef.current, chartBarRoots(chart)) ?? midiInfo.firstMusicBar;
-  }, [midiInfo, chart]);
+    if (midiInfo.iReal || !sourceChart || !midiBufferRef.current) return midiInfo.firstMusicBar;
+    return alignFormStart(midiBufferRef.current, chartBarRoots(sourceChart)) ?? midiInfo.firstMusicBar;
+  }, [midiInfo, sourceChart]);
   // Non-iReal files: only offer the passes where the bass follows the chart.
   const verifiedChoruses = useMemo(() => {
-    if (!midiInfo || midiInfo.iReal || !chart || !midiBufferRef.current) return Number.POSITIVE_INFINITY;
-    return alignedChoruses(midiBufferRef.current, chartBarRoots(chart), formStartBar);
-  }, [midiInfo, chart, formStartBar]);
+    if (!midiInfo || midiInfo.iReal || !sourceChart || !midiBufferRef.current) return Number.POSITIVE_INFINITY;
+    return alignedChoruses(midiBufferRef.current, chartBarRoots(sourceChart), formStartBar);
+  }, [midiInfo, sourceChart, formStartBar]);
 
   // Band sounds chosen for this song (MIDI channel 0–15 → sound id).
   const songKey = songTitleKey(localSong.title);
+  // Key: semitones from the written key, chosen per song (−5 … +6).
+  const transpose = settings.songTranspose?.[songKey] ?? 0;
+  const setTranspose = (value: number) => {
+    const next = ((((value + 5) % 12) + 12) % 12) - 5;
+    onUpdateSettings({ songTranspose: { ...(settings.songTranspose ?? {}), [songKey]: next } });
+  };
+  // The key iReal gives; failing that, the chart's last chord.
+  const writtenKey = useMemo(
+    () => parseIrealKey(irealSong.key ?? '') ?? (sourceChart ? chartKey(sourceChart) : null),
+    [irealSong.key, sourceChart],
+  );
+  const chart = useMemo(
+    () => (sourceChart ? transposeChart(sourceChart, transpose, writtenKey) : null),
+    [sourceChart, transpose, writtenKey],
+  );
   const songSounds = useMemo(() => {
     const saved = settings.bandSounds?.[songKey] ?? {};
     return Object.fromEntries(Object.entries(saved).map(([ch, id]) => [Number(ch), id])) as Record<number, string>;
@@ -323,7 +340,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     if (!chart || !midiBufferRef.current || originalBpm === null) return null;
     // A file that starts straight on the form gets a one-bar count-in.
     const needsCountIn = formStartBar === 0;
-    const buffer = needsCountIn ? prependCountIn(midiBufferRef.current.slice(0), 1) : midiBufferRef.current.slice(0);
+    const written = needsCountIn ? prependCountIn(midiBufferRef.current.slice(0), 1) : midiBufferRef.current.slice(0);
+    // The band in the chosen key (drums untouched).
+    const buffer = transposeMidi(written, transpose);
     const bpm = resolveTempo(tempoLevel, originalBpm);
     const formBars = chart.bars.length;
     const info = analyzeMidi(buffer);
@@ -798,7 +817,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                   </fieldset>
 
                   <fieldset>
-                    <legend className="font-display text-base font-semibold">Tempo</legend>
+                    <legend className="font-display text-base font-semibold">Tempo {originalBpm !== null && <span className="text-sm font-semibold text-muted">(BPM)</span>}</legend>
                     <div className="mt-1.5 flex flex-wrap gap-2">
                       {TEMPO_LEVELS.map((level) => (
                         <button
@@ -809,7 +828,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                           className={`mb-btn mb-btn-sm ${tempoLevel === level ? 'mb-btn-sky' : 'mb-btn-ghost'}`}
                         >
                           {level === 'slow' ? 'Lent' : level === 'medium' ? 'Moyen' : 'Original'}
-                          {originalBpm !== null ? ` (${resolveTempo(level, originalBpm)} BPM)` : ''}
+                          {originalBpm !== null ? ` · ${resolveTempo(level, originalBpm)}` : ''}
                         </button>
                       ))}
                     </div>
@@ -836,7 +855,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <label className="flex items-center gap-3 font-bold">
                     <input type="checkbox" checked={pianoGuide} onChange={(e) => setPianoGuide(e.target.checked)} className="h-5 w-5 accent-sky" />
                     Laisser le piano du morceau en fond (guide)
@@ -845,8 +864,24 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                     <input type="checkbox" checked={showKeys} onChange={(e) => setShowKeys(e.target.checked)} className="h-5 w-5 accent-sky" />
                     Montrer les touches sur le clavier
                   </label>
-                  <label className="block font-bold" title="Compense le délai du son (enceintes Bluetooth : 150–250 ms). Toujours « en retard » alors que vous jouez avec la batterie ? Augmentez-le.">
-                    Calage du son : {latencyMs} ms
+                  {writtenKey && (
+                    <div className="flex items-center gap-2 font-bold">
+                      <span>Tonalité :</span>
+                      <button type="button" onClick={() => setTranspose(transpose - 1)} disabled={transpose <= -5} aria-label="Un demi-ton plus bas" className="grid h-8 w-8 place-items-center rounded-xl border-2 border-line text-lg leading-none text-muted hover:text-text disabled:opacity-40">−</button>
+                      <span className="min-w-28 text-center font-display text-lg" aria-live="polite">
+                        {formatKey({ ...writtenKey, root: writtenKey.root + transpose }, notation)}
+                        <span className="ml-1 text-xs font-semibold text-muted">
+                          {transpose === 0 ? '(originale)' : `(${transpose > 0 ? '+' : '−'}${Math.abs(transpose)})`}
+                        </span>
+                      </span>
+                      <button type="button" onClick={() => setTranspose(transpose + 1)} disabled={transpose >= 6} aria-label="Un demi-ton plus haut" className="grid h-8 w-8 place-items-center rounded-xl border-2 border-line text-lg leading-none text-muted hover:text-text disabled:opacity-40">+</button>
+                      {transpose !== 0 && (
+                        <button type="button" onClick={() => setTranspose(0)} className="text-xs font-bold text-sky-press underline dark:text-sky">originale</button>
+                      )}
+                    </div>
+                  )}
+                  <label className="flex items-center gap-3 font-bold" title="Compense le délai du son (enceintes Bluetooth : 150–250 ms). Toujours « en retard » alors que vous jouez avec la batterie ? Augmentez-le.">
+                    <span className="shrink-0">Calage du son : {latencyMs} ms</span>
                     <input
                       type="range"
                       min={-100}
@@ -854,7 +889,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                       step={10}
                       value={latencyMs}
                       onChange={(e) => setLatencyMs(Number(e.target.value))}
-                      className="mt-1 block w-full accent-sky"
+                      className="min-w-0 flex-1 accent-sky"
                     />
                   </label>
 
