@@ -138,6 +138,16 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   const navigatedRef = useRef(false);
   /** Song time where a resumed passage starts (one metronome bar before it). */
   const [resumeAtMs, setResumeAtMs] = useState<number | null>(null);
+  // Loop a section (B in pause: start, then end, then off), by chord indices.
+  const [loop, setLoop] = useState<{ start: number; end: number } | null>(null);
+  const loopRef = useRef<{ start: number; end: number } | null>(null);
+  const [loopMark, setLoopMark] = useState<number | null>(null);
+  /** Results of the finished passes through the loop (each pass is judged). */
+  const loopArchiveRef = useRef<ChordResult[]>([]);
+  const loopPassRef = useRef(0);
+  const [loopPass, setLoopPass] = useState(0);
+  /** The scorer's anticipation: a chord struck this early belongs to the next pass. */
+  const anticipationRef = useRef(0);
   const runConfigRef = useRef({ step, bpm: 0, originalBpm: 0 });
 
   // Read the MIDI once to know its tempo (tempo buttons show real BPM).
@@ -179,7 +189,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       const backing = backingRef.current;
       const scorer = scorerRef.current;
       if (!backing || !scorer || pausedRef.current) return;
-      const songMs = backing.songMs(timeMs, latencyRef.current);
+      const songMs = backing.songMs(timeMs, latencyRef.current, anticipationRef.current);
       if (songMs === null) return;
       if (on) scorer.noteOn(note, songMs);
       else scorer.noteOff(note);
@@ -206,7 +216,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
         return;
       }
       if (reachedEnd) scorer.advance(Number.POSITIVE_INFINITY);
-      const all = [...scorer.results];
+      const all = [...loopArchiveRef.current, ...scorer.results];
       const sum = summarize(tl, all);
       setResults(all);
       setSummary(sum);
@@ -386,7 +396,15 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       const tl = buildTimeline(chart, { bpm, countInBars, choruses });
       timelineRef.current = tl;
       setTimeline(tl);
-      scorerRef.current = new PlayAlongScorer(tl, defaultScorerOptions(tl, step));
+      const scorerOptions = defaultScorerOptions(tl, step);
+      anticipationRef.current = scorerOptions.anticipationMs;
+      scorerRef.current = new PlayAlongScorer(tl, scorerOptions);
+      loopRef.current = null;
+      setLoop(null);
+      setLoopMark(null);
+      loopArchiveRef.current = [];
+      loopPassRef.current = 0;
+      setLoopPass(0);
       runConfigRef.current = { step, bpm, originalBpm };
       setResults([]);
       setSummary(null);
@@ -409,10 +427,25 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
         const songMs = backing.songMs(performance.now(), latencyRef.current) ?? 0;
         const fresh = scorerRef.current?.advance(songMs) ?? [];
         if (fresh.length) setResults((prev) => [...prev, ...fresh]);
+        const looping = loopRef.current;
+        if (looping && scorerRef.current) {
+          const linear = backing.linearMs(performance.now(), latencyRef.current) ?? 0;
+          const pass = backing.loopPass(linear, anticipationRef.current);
+          if (pass > loopPassRef.current) {
+            // A pass is over: keep its results, judge the section afresh.
+            const scorer = scorerRef.current;
+            scorer.advance(tl.chords[looping.end].endMs);
+            loopArchiveRef.current.push(...scorer.results.filter((r) => r.index >= looping.start && r.index <= looping.end));
+            scorer.seek(looping.start);
+            setResults((prev) => prev.filter((r) => r.index < looping.start || r.index > looping.end));
+            loopPassRef.current = pass;
+            setLoopPass(pass);
+          }
+        }
         const index = chordIndexAt(tl, songMs);
         const beat = Math.floor(songMs / tl.beatMs);
         setClock((c) => (c.index === index && c.beat === beat ? c : { index, beat, songMs }));
-        if (songMs > tl.endMs + 400) {
+        if (!loopRef.current && songMs > tl.endMs + 400) {
           void finish(true);
           return;
         }
@@ -492,7 +525,14 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     const tl = timelineRef.current;
     const backing = backingRef.current;
     if (!pausedRef.current || !tl || !backing) return;
-    const i = cursorRef.current;
+    const looping = loopRef.current;
+    // With a loop: from the cursor if it's inside the section, else its start.
+    const i = looping && (cursorRef.current < looping.start || cursorRef.current > looping.end) ? looping.start : cursorRef.current;
+    if (i !== cursorRef.current) showCursor(i);
+    backing.setLoop(looping ? { fromMs: tl.chords[looping.start].startMs, toMs: tl.chords[looping.end].endMs } : null);
+    if (looping) navigatedRef.current = true;
+    loopPassRef.current = 0;
+    setLoopPass(0);
     scorerRef.current?.seek(i);
     setResults((prev) => prev.filter((r) => r.index < i));
     const at = tl.chords[i].startMs;
@@ -506,9 +546,46 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   const restartRun = () => {
     if (!timelineRef.current) return;
     if (!pausedRef.current) pauseRun();
+    // The top of the song, the whole song: any loop is removed.
+    loopRef.current = null;
+    setLoop(null);
+    setLoopMark(null);
+    loopArchiveRef.current = [];
     showCursor(0);
     navigatedRef.current = false;
     void resumeRun();
+  };
+
+  /** B: in pause, marks the loop's first chord, then its last; a third time removes it. */
+  const toggleLoopMark = () => {
+    if (!timelineRef.current) return;
+    if (loopRef.current) {
+      loopRef.current = null;
+      setLoop(null);
+      setLoopMark(null);
+      return;
+    }
+    if (!pausedRef.current) pauseRun();
+    if (loopMark === null) {
+      setLoopMark(cursorRef.current);
+      return;
+    }
+    const next = { start: Math.min(loopMark, cursorRef.current), end: Math.max(loopMark, cursorRef.current) };
+    loopRef.current = next;
+    setLoop(next);
+    setLoopMark(null);
+    showCursor(next.start);
+  };
+
+  /** Clicking a bar in pause moves the cursor to it. */
+  const pickBar = (chorusIndex: number, bar: number) => {
+    const tl = timelineRef.current;
+    if (!tl || !pausedRef.current) return;
+    const i = tl.chords.findIndex((t) => t.chorus === chorusIndex && t.formBar === bar);
+    if (i >= 0) {
+      navigatedRef.current = true;
+      showCursor(i);
+    }
   };
 
   useEffect(() => {
@@ -516,6 +593,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     const onKey = (e: KeyboardEvent) => {
       const keys: Record<string, () => void> = {
         KeyR: restartRun,
+        KeyB: toggleLoopMark,
         Space: () => (pausedRef.current ? void resumeRun() : pauseRun()),
         ArrowLeft: () => moveCursor('chord', -1),
         ArrowRight: () => moveCursor('chord', 1),
@@ -527,7 +605,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       // Ours: no page scroll, no focused button pressed, no piano key.
       e.preventDefault();
       e.stopPropagation();
-      if ((e.code === 'Space' || e.code === 'KeyR') && e.repeat) return;
+      if ((e.code === 'Space' || e.code === 'KeyR' || e.code === 'KeyB') && e.repeat) return;
       action();
     };
     window.addEventListener('keydown', onKey, { capture: true });
@@ -844,7 +922,13 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                 <Mascot size={44} mood={mood} className="hidden shrink-0 sm:block" />
                 <p className="font-display text-lg font-semibold text-muted">
                   {paused
-                    ? `En pause · mesure ${formBar + 1}/${timeline.formBars}`
+                    ? `En pause · mesure ${formBar + 1}/${timeline.formBars}${
+                        loop ? ` · boucle ${timeline.chords[loop.start].formBar + 1}–${timeline.chords[loop.end].formBar + 1}` : ''
+                      }`
+                    : resumeAtMs !== null && clock.songMs < resumeAtMs
+                      ? 'Reprise : une mesure de métronome…'
+                      : loop
+                      ? `Boucle mesures ${timeline.chords[loop.start].formBar + 1}–${timeline.chords[loop.end].formBar + 1} · passage ${loopPass + 1} · mesure ${formBar + 1}`
                     : resumeAtMs !== null && clock.songMs < resumeAtMs
                       ? 'Reprise : une mesure de métronome…'
                       : inCountIn
@@ -855,7 +939,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                 </p>
                 {paused && (
                   <span className="hidden text-sm font-bold text-muted lg:inline">
-                    Espace : reprendre · ← → accord · ↑ ↓ ligne · R : début
+                    {loopMark !== null
+                      ? 'Placez la fin de la boucle, puis B'
+                      : 'Espace : reprendre · ← → accord · ↑ ↓ ligne · B : boucle · R : début'}
                   </span>
                 )}
                 {!paused && inCountIn && countInBeatsLeft <= timeline.beatsPerBar && (
@@ -898,11 +984,16 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                   const isNextUp = inCountIn && barNumber === 0;
                   const items = timeline.chords.filter((t) => t.chorus === chorus && t.formBar === barNumber);
                   const written = bar.length > 0;
+                  const inLoop = loop !== null && items.some((t) => t.index >= loop.start && t.index <= loop.end);
+                  const isLoopMark = loopMark !== null && items.some((t) => t.index === loopMark);
                   return (
                     <div
                       key={barNumber}
                       data-testid={isCurrent ? 'playalong-current-bar' : undefined}
-                      className={`relative flex min-h-0 items-center rounded-xl border-2 px-2 pb-1.5 transition-all duration-150 sm:px-3 ${
+                      onClick={paused ? () => pickBar(chorus, barNumber) : undefined}
+                      className={`relative flex min-h-0 items-center rounded-xl border-2 px-2 pb-1.5 transition-all duration-150 sm:px-3 ${paused ? 'cursor-pointer' : ''} ${
+                        inLoop ? 'outline-2 outline-offset-2 outline-sky outline-dashed' : loop !== null ? 'opacity-45' : ''
+                      } ${
                         isCurrent && paused
                           ? 'z-10 scale-[1.03] border-brass bg-brass/20 shadow-[0_4px_0_var(--color-brass-press)]'
                           : isCurrent
@@ -913,6 +1004,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                       }`}
                     >
                       <span className="absolute top-0.5 left-1.5 text-[10px] font-bold text-muted">{barNumber + 1}</span>
+                      {isLoopMark && (
+                        <span className="absolute top-0.5 right-1.5 rounded bg-sky px-1 text-[10px] font-extrabold text-white">début</span>
+                      )}
                       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                         {(items.length ? items : bar.map((item, k) => ({ index: -1 - k, item }))).map((t) => {
                           const r = t.index >= 0 ? resultByIndex.get(t.index) : undefined;
@@ -1050,8 +1144,13 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
           )}
           {phase === 'playing' && (
             <span className="mr-auto hidden text-sm font-bold text-muted md:inline">
-              Espace : pause · flèches : se déplacer · R : recommencer
+              Espace : pause · flèches : se déplacer · B : boucle · R : recommencer
             </span>
+          )}
+          {phase === 'playing' && (
+            <button type="button" onClick={toggleLoopMark} className={`mb-btn ${loop ? 'mb-btn-sky' : 'mb-btn-ghost'}`}>
+              {loop ? 'Retirer la boucle' : loopMark !== null ? 'Fin de boucle ici' : 'Début de boucle ici'}
+            </button>
           )}
           {phase === 'playing' && (
             <button

@@ -1,4 +1,5 @@
 import { BandSequencer } from './bandSequencer';
+import { LoopSpan, foldLoop, loopPassAt } from '../practice/loop';
 import {
   MidiAnalysis,
   analyzeMidi,
@@ -32,6 +33,7 @@ export interface BackingOptions {
 export class BackingTrack {
   private readonly band = new BandSequencer();
   private anchors: number[] = [];
+  private loop: LoopSpan | null = null;
   private startedAt: number | null = null;
   analysis: MidiAnalysis | null = null;
 
@@ -126,7 +128,13 @@ export class BackingTrack {
    * Song time (ms) corresponding to a `performance.now()` instant.
    * `latencyMs` shifts the clock to what the learner actually hears.
    */
-  songMs(perfTime = performance.now(), latencyMs = 0): number | null {
+  songMs(perfTime = performance.now(), latencyMs = 0, leadMs = 0): number | null {
+    const t = this.linearMs(perfTime, latencyMs);
+    return t === null ? null : this.mapLoop(t, leadMs);
+  }
+
+  /** Song time on a continuous clock: with a loop it keeps growing past its end. */
+  linearMs(perfTime = performance.now(), latencyMs = 0): number | null {
     let anchor: number | null = null;
     if (this.anchors.length > 0) {
       const sorted = [...this.anchors].sort((a, b) => a - b);
@@ -135,6 +143,29 @@ export class BackingTrack {
       anchor = this.startedAt;
     }
     return anchor === null ? null : perfTime - anchor - latencyMs;
+  }
+
+  /**
+   * Loops the band over [fromMs, toMs) of the song (null = no loop). Set it
+   * before resumeAt().
+   */
+  setLoop(loop: LoopSpan | null): void {
+    this.loop = loop && loop.toMs > loop.fromMs ? loop : null;
+    this.band.setLoop(this.loop ? { fromS: this.loop.fromMs / 1000, toS: this.loop.toMs / 1000 } : null);
+  }
+
+  /**
+   * Continuous time → time in the song, folded into the loop. `leadMs`: the
+   * last moments of a pass already belong to the next one (a chord played a
+   * little early, before the loop's first bar comes round again).
+   */
+  mapLoop(t: number, leadMs = 0): number {
+    return foldLoop(t, this.loop, leadMs);
+  }
+
+  /** How many passes of the loop are over at continuous time `t` (with the same lead). */
+  loopPass(t: number, leadMs = 0): number {
+    return loopPassAt(t, this.loop, leadMs);
   }
 
   /** Stops and releases the audio context (call when leaving the screen). */

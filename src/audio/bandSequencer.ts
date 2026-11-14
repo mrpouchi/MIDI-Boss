@@ -150,6 +150,10 @@ export class BandSequencer {
   private timer: number | null = null;
   private clicks: { time: number; accent: boolean }[] = [];
   private nextClick = 0;
+  /** Section played over and over (file seconds), or null. */
+  private loop: { fromS: number; toS: number } | null = null;
+  /** Seconds added to note times for the current pass through the loop. */
+  private loopOffset = 0;
 
   constructor() {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -228,6 +232,7 @@ export class BandSequencer {
     let first = 0;
     while (first < notes.length && notes[first].time < fromS - 0.001) first++;
     this.next = first;
+    this.loopOffset = 0;
     this.nextClick = 0;
     while (this.nextClick < this.clicks.length && this.clicks[this.nextClick].time < fromS - preRollS - 0.001) this.nextClick++;
     this.startAt = this.ctx.currentTime + 0.12 + preRollS - fromS;
@@ -236,7 +241,18 @@ export class BandSequencer {
     return true;
   }
 
-  /** Seconds into the file at the audio clock (null when stopped). */
+  /**
+   * Plays the section [fromS, toS) over and over, seamlessly: the next pass is
+   * queued ahead like any other notes. Set it before start(); null = no loop.
+   */
+  setLoop(loop: { fromS: number; toS: number } | null): void {
+    this.loop = loop && loop.toS > loop.fromS ? loop : null;
+  }
+
+  /**
+   * Seconds since the start point on a continuous clock (null when stopped):
+   * with a loop it keeps growing; map it back with the loop length.
+   */
   positionS(): number | null {
     return this.startAt === null ? null : this.ctx.currentTime - this.startAt;
   }
@@ -268,19 +284,30 @@ export class BandSequencer {
     if (!schedule || this.startAt === null) return;
     const now = this.ctx.currentTime;
     const horizon = now + LOOKAHEAD_S;
-    while (this.next < schedule.notes.length) {
+    const loop = this.loop;
+    for (;;) {
+      if (loop && (this.next >= schedule.notes.length || schedule.notes[this.next].time >= loop.toS - 0.001)) {
+        // End of the section: the next pass starts right where this one ends.
+        if (this.startAt + this.loopOffset + loop.toS > horizon) break;
+        this.loopOffset += loop.toS - loop.fromS;
+        this.next = firstNoteAt(schedule.notes, loop.fromS);
+        continue;
+      }
+      if (this.next >= schedule.notes.length) break;
       const n = schedule.notes[this.next];
-      const when = this.startAt + n.time;
+      const when = this.startAt + this.loopOffset + n.time;
       if (when > horizon) break;
       this.next++;
       if (when < now - MAX_LATE_S) continue;
       const ch = this.channels.get(n.channel);
       if (!ch) continue;
+      // In a loop, a note does not ring on into the next pass.
+      const duration = loop && n.channel !== DRUM_CHANNEL ? Math.min(n.duration, loop.toS - n.time + 0.05) : n.duration;
       if (ch.kind === 'smplr') {
-        ch.instrument.start({ note: n.note, velocity: n.velocity, time: when, duration: n.duration });
+        ch.instrument.start({ note: n.note, velocity: n.velocity, time: when, duration });
       } else {
         const volume = REFERENCE_GAIN * (n.velocity / 127) ** 2;
-        ch.player.queueWaveTable(when, n.note, n.duration, volume);
+        ch.player.queueWaveTable(when, n.note, duration, volume);
       }
     }
     while (this.nextClick < this.clicks.length) {
@@ -290,8 +317,14 @@ export class BandSequencer {
       this.nextClick++;
       if (when >= now - MAX_LATE_S) metronomeClick(this.ctx, this.ctx.destination, when, c.accent);
     }
-    if (this.next >= schedule.notes.length && now > this.startAt + schedule.durationS + 3) this.stop();
+    if (!loop && this.next >= schedule.notes.length && now > this.startAt + schedule.durationS + 3) this.stop();
   }
+}
+
+function firstNoteAt(notes: ScheduledNote[], timeS: number): number {
+  let i = 0;
+  while (i < notes.length && notes[i].time < timeS - 0.001) i++;
+  return i;
 }
 
 /** A short, soft room reverb (exponentially decaying noise). */

@@ -526,3 +526,9 @@ La build finale observée incluait le WASM `chordsketch_wasm_bg-*.wasm` (~495 kB
 ## PREMIÈRE ACTION À EFFECTUER
 
 Faire valider à l’utilisateur l’écoute du mixage restauré et de la batterie convertie (Répertoire → Importer un MIDI → Blue Bossa.mid → vérifier « Mixage mémorisé », Piano à 35 %, la case « Batterie iReal Pro convertie en General MIDI » cochée et le ride sur la piste Drums → Jouer), puis choisir entre : (a) connecter le transport MIDI à `PlayScreen`/la grille iReal, ou (b) ajouter les tests unitaires iReal en introduisant un runner de tests.
+
+## Blue Bossa, troisième section (14 novembre 2026)
+
+- Nouveau MIDI Blue Bossa (160 BPM, 4/4, 63 mesures) : trompette, alto, trombone, guitare, basse, batterie, pas de piano. L'ancien export reste dans `~/Documents/eph/Blue Bossa.mid`.
+- Intro de 8 mesures retirée à la demande de l'utilisateur : la copie dans `local-songs/` est coupée (94 notes en moins, tempo et sons gardés au début), l'original reste dans `~/Documents/eph/Midi`. Le fichier commence donc sur la grille (`alignFormStart` = 0) : l'appli ajoute une mesure de décompte au métronome. 3 grilles complètes vérifiées (`alignedChoruses` = 3), puis une fin.
+- Parcours : nouvelle section 3 « La bossa mineure » (id `minor-bossa`) avec Blue Bossa, sortie de « Couleurs mineures », qui ne garde que Footprints.
