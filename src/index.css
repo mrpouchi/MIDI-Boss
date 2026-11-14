@@ -1,103 +1,211 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * MIDI Boss design system — see docs/DESIGN.md.
+ * Inspired by Duolingo's structure (path, pressable buttons, bottom feedback),
+ * with its own musical identity: ebony ink, ivory keys, brass accent.
+ */
+@theme {
+  --font-sans: "Nunito", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-display: "Fredoka", "Nunito", ui-rounded, system-ui, sans-serif;
+
+  /* Brand colours as utilities: bg-ink, text-brass, border-coral… */
+  --color-ink: #1b2140;
+  --color-green: #3dbe29;
+  --color-green-press: #2f9a1e;
+  --color-brass: #ffb31a;
+  --color-brass-press: #d99200;
+  --color-sky: #2a9df4;
+  --color-sky-press: #1c7fcc;
+  --color-coral: #ff5a5f;
+  --color-coral-press: #d63e43;
+
+  /* Legacy palettes remapped so screens not yet redesigned already share the identity. */
+  --color-stone-50: #f7f8fb; --color-stone-100: #f2f4f9; --color-stone-200: #e1e5ef; --color-stone-300: #cbd1e0;
+  --color-stone-400: #9aa3c0; --color-stone-500: #6e7899; --color-stone-600: #515b7e; --color-stone-700: #3a4366;
+  --color-stone-800: #2b3358; --color-stone-900: #1b2140; --color-stone-950: #12162b;
+  --color-slate-50: #f7f8fb; --color-slate-100: #eef1fa; --color-slate-200: #dfe4f2; --color-slate-300: #c3cbe2;
+  --color-slate-400: #9aa3c0; --color-slate-500: #707a9c; --color-slate-600: #4f5980; --color-slate-700: #38416a;
+  --color-slate-800: #2b3358; --color-slate-900: #1b2140; --color-slate-950: #12162b;
+  --color-indigo-50: #eaf5fe; --color-indigo-100: #d3ebfd; --color-indigo-200: #a9d7fb; --color-indigo-300: #74bef8;
+  --color-indigo-400: #45a9f6; --color-indigo-500: #2a9df4; --color-indigo-600: #1c7fcc; --color-indigo-700: #17669f;
+  --color-indigo-800: #154f7a; --color-indigo-900: #133f60; --color-indigo-950: #0c2740;
+  --color-emerald-50: #edfbe9; --color-emerald-100: #d5f5cc; --color-emerald-200: #adea9c; --color-emerald-300: #7fdb68;
+  --color-emerald-400: #57cc3c; --color-emerald-500: #3dbe29; --color-emerald-600: #2f9a1e; --color-emerald-700: #26781a;
+  --color-emerald-800: #205e18; --color-emerald-900: #1b4d16; --color-emerald-950: #0b2a08;
+  --color-rose-50: #fff0f0; --color-rose-100: #ffdcdd; --color-rose-200: #ffbdbf; --color-rose-300: #ff9195;
+  --color-rose-400: #ff6f74; --color-rose-500: #ff5a5f; --color-rose-600: #d63e43; --color-rose-700: #b32f34;
+  --color-rose-800: #93292d; --color-rose-900: #7a272a; --color-rose-950: #430f11;
+  --color-amber-50: #fff8e6; --color-amber-100: #ffedbf; --color-amber-200: #ffdc85; --color-amber-300: #ffc94d;
+  --color-amber-400: #ffb31a; --color-amber-500: #f2a000; --color-amber-600: #d99200; --color-amber-700: #a86b00;
+  --color-amber-800: #875400; --color-amber-900: #6e4500; --color-amber-950: #3f2600;
+  --color-violet-50: #fff8e6; --color-violet-100: #ffedbf; --color-violet-200: #ffdc85; --color-violet-300: #ffc94d;
+  --color-violet-400: #ffb31a; --color-violet-500: #f2a000; --color-violet-600: #d99200; --color-violet-700: #a86b00;
+  --color-violet-800: #875400; --color-violet-900: #6e4500; --color-violet-950: #3f2600;
+}
+
+/* Semantic surfaces that follow the theme. */
+@theme inline {
+  --color-page: var(--mb-page);
+  --color-surface: var(--mb-surface);
+  --color-mist: var(--mb-mist);
+  --color-line: var(--mb-line);
+  --color-text: var(--mb-text);
+  --color-muted: var(--mb-muted);
+}
+
 @layer base {
   :root {
-    /* Adapted from the public Duolingo references — original implementation. */
-    --duo-green: #58cc02;
-    --duo-green-press: #46a302;
-    --duo-green-soft: #d7ffb8;
-    --duo-blue: #1cb0f6;
-    --duo-blue-press: #1899d6;
-    --duo-yellow: #ffc800;
-    --duo-red: #ff4b4b;
-    --duo-orange: #ff9600;
-    --duo-purple: #ce82ff;
-    --duo-eel: #4b4b4b;
-    --duo-wolf: #777777;
-    --duo-hare: #afafaf;
-    --duo-swan: #e5e5e5;
-    --duo-polar: #f7f7f7;
-    --duo-snow: #ffffff;
-    --duo-radius: 18px;
-    --duo-radius-small: 12px;
-    --duo-shadow-green: 0 4px 0 var(--duo-green-press);
-    --duo-shadow-blue: 0 4px 0 var(--duo-blue-press);
-    --duo-shadow-neutral: 0 3px 0 #d6d6d6;
-    --font-display: "Nunito", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
-    --font-sans: "Nunito", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    /* Motion: a springy ease for hover/press, a calm one for entrances. */
+    --mb-spring: cubic-bezier(.34, 1.56, .64, 1);
+    --mb-ease: cubic-bezier(.22, 1, .36, 1);
+    --mb-page: #ffffff;
+    --mb-surface: #ffffff;
+    --mb-mist: #f2f4f9;
+    --mb-line: #e1e5ef;
+    --mb-text: #1b2140;
+    --mb-muted: #6e7899;
+    --mb-press-neutral: #d3d9e6;
+
+    /* Legacy aliases used by earlier components. */
+    --duo-green: #3dbe29;
+    --duo-green-press: #2f9a1e;
+    --duo-green-soft: #d5f5cc;
+    --duo-blue: #2a9df4;
+    --duo-blue-press: #1c7fcc;
+    --duo-yellow: #ffb31a;
+    --duo-red: #ff5a5f;
+    --duo-eel: var(--mb-text);
+    --duo-wolf: var(--mb-muted);
+    --duo-swan: var(--mb-line);
+    --duo-polar: var(--mb-mist);
+    --duo-snow: var(--mb-page);
+  }
+
+  html.dark {
+    --mb-page: #12162b;
+    --mb-surface: #1b2140;
+    --mb-mist: #1b2140;
+    --mb-line: #2b3358;
+    --mb-text: #eef1fa;
+    --mb-muted: #9aa3c0;
+    --mb-press-neutral: #0c0f1f;
+    color-scheme: dark;
   }
 
   html {
     font-family: var(--font-sans);
-    background-color: var(--duo-snow);
-    color: var(--duo-eel);
+    background-color: var(--mb-page);
+    color: var(--mb-text);
     color-scheme: light;
+    -webkit-font-smoothing: antialiased;
   }
 
-  html.dark {
-    --duo-snow: #131f24;
-    --duo-polar: #202f36;
-    --duo-eel: #f1f7fb;
-    --duo-wolf: #a3b4bd;
-    --duo-swan: #37464f;
-    background-color: var(--duo-snow);
-    color: var(--duo-eel);
-    color-scheme: dark;
-  }
-
-  h1,
-  h2,
-  h3,
-  .font-display {
+  h1, h2, h3, .font-display {
     font-family: var(--font-display);
     text-wrap: balance;
   }
 
   .font-mono-tabular {
-    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-sky);
+    outline-offset: 3px;
   }
 }
 
 @layer components {
-  .duo-shell { background: var(--duo-snow); color: var(--duo-eel); }
-  .duo-card { border: 2px solid var(--duo-swan); border-radius: var(--duo-radius); background: var(--duo-snow); }
-  .duo-card-soft { border: 2px solid var(--duo-swan); border-radius: var(--duo-radius); background: var(--duo-polar); }
-  .duo-eyebrow { color: var(--duo-blue); font-size: .75rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
-  .duo-title { font-family: var(--font-display); font-weight: 900; letter-spacing: -.035em; line-height: 1.05; color: var(--duo-eel); }
-  .duo-copy { color: var(--duo-wolf); line-height: 1.45; }
-  .duo-button {
+  /* Pressable button: coloured face + darker "edge" that disappears on press. */
+  .mb-btn {
+    --edge: 4px;
     display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
-    border: 0; border-radius: var(--duo-radius-small); padding: .8rem 1.15rem;
-    font-family: var(--font-sans); font-size: .82rem; font-weight: 900;
-    letter-spacing: .045em; text-transform: uppercase; transition: transform 100ms ease, filter 100ms ease;
+    min-height: 3rem; padding: .7rem 1.4rem; border-radius: 16px;
+    font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; letter-spacing: .01em;
+    border: 2px solid transparent; cursor: pointer; user-select: none; white-space: nowrap;
+    transition: transform 220ms var(--mb-spring), box-shadow 220ms var(--mb-spring), filter 150ms ease;
   }
-  .duo-button:hover { filter: brightness(1.035); }
-  .duo-button:active { transform: translateY(3px); box-shadow: none; }
-  .duo-button:focus-visible, .duo-focus:focus-visible { outline: 3px solid var(--duo-blue); outline-offset: 3px; }
-  .duo-button:disabled { cursor: not-allowed; filter: grayscale(.35); opacity: .5; box-shadow: none; }
-  .duo-button-primary { background: var(--duo-green); box-shadow: var(--duo-shadow-green); color: white; }
-  .duo-button-secondary { background: var(--duo-blue); box-shadow: var(--duo-shadow-blue); color: white; }
-  .duo-button-outline { border: 2px solid var(--duo-swan); background: var(--duo-snow); box-shadow: var(--duo-shadow-neutral); color: var(--duo-wolf); }
-  .duo-pill { border-radius: 999px; font-size: .72rem; font-weight: 900; letter-spacing: .04em; }
-  .duo-progress { height: 14px; overflow: hidden; border-radius: 999px; background: var(--duo-swan); }
-  .duo-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--duo-green); transition: width 300ms ease; }
-  .duo-pressable { transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease; }
-  .duo-pressable:hover { transform: translateY(-1px); }
-  .duo-pressable:active { transform: translateY(1px); }
-  .duo-pop { animation: duo-pop 260ms cubic-bezier(.2,.9,.25,1.2) both; }
-  .duo-celebrate { animation: duo-celebrate 520ms cubic-bezier(.2,.9,.25,1.1) both; }
+  /* Hover: the key rises on its edge; press: it goes all the way down. */
+  .mb-btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.05); }
+  .mb-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 transparent !important; transition-duration: 60ms; }
+  .mb-btn:disabled { cursor: not-allowed; opacity: .55; filter: grayscale(.4); }
+  .mb-btn-green { background: var(--color-green); color: white; box-shadow: 0 4px 0 var(--color-green-press); }
+  .mb-btn-green:hover:not(:disabled) { box-shadow: 0 6px 0 var(--color-green-press); }
+  .mb-btn-sky { background: var(--color-sky); color: white; box-shadow: 0 4px 0 var(--color-sky-press); }
+  .mb-btn-sky:hover:not(:disabled) { box-shadow: 0 6px 0 var(--color-sky-press); }
+  .mb-btn-coral { background: var(--color-coral); color: white; box-shadow: 0 4px 0 var(--color-coral-press); }
+  .mb-btn-coral:hover:not(:disabled) { box-shadow: 0 6px 0 var(--color-coral-press); }
+  .mb-btn-brass { background: var(--color-brass); color: var(--color-ink); box-shadow: 0 4px 0 var(--color-brass-press); }
+  .mb-btn-brass:hover:not(:disabled) { box-shadow: 0 6px 0 var(--color-brass-press); }
+  .mb-btn-ghost { background: var(--mb-surface); color: var(--mb-muted); border-color: var(--mb-line); box-shadow: 0 4px 0 var(--mb-line); }
+  .mb-btn-ghost:hover:not(:disabled) { box-shadow: 0 6px 0 var(--mb-line); }
+  .mb-btn-ghost:hover { color: var(--mb-text); }
+  .mb-btn-sm { min-height: 2.5rem; padding: .45rem 1rem; font-size: .95rem; border-radius: 13px; }
+
+  .mb-panel { background: var(--mb-surface); border: 2px solid var(--mb-line); border-radius: 20px; }
+
+  /* Cards you can act on: lift with a spring, border catches the light. */
+  .mb-lift {
+    transition: transform 260ms var(--mb-spring), box-shadow 260ms var(--mb-ease), border-color 160ms ease;
+  }
+  .mb-lift:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--color-sky) 45%, var(--mb-line));
+    box-shadow: 0 10px 24px -12px rgb(27 33 64 / .28);
+  }
+
+  /* Round path / tree nodes: bounce on hover, sink on press. */
+  .mb-node { transition: transform 280ms var(--mb-spring), box-shadow 200ms var(--mb-ease); }
+  .mb-node:hover:not(:disabled) { transform: translateY(-3px) scale(1.07); }
+  .mb-node:active:not(:disabled) { transform: translateY(5px) scale(.98); box-shadow: 0 0 0 transparent !important; transition-duration: 70ms; }
+
+  /* Skill tree: the node content scales around its own centre. */
+  .mb-tree-node { transform-box: fill-box; transform-origin: center; transition: transform 300ms var(--mb-spring); }
+  g:hover > .mb-tree-node, g:focus-visible > .mb-tree-node { transform: scale(1.13); }
+
+  /* Small icon bounce for nav items. */
+  .mb-wiggle svg { transition: transform 300ms var(--mb-spring); }
+  .mb-wiggle:hover svg { transform: scale(1.15) rotate(-6deg); }
+
+  /* Screen entrance. */
+  .mb-enter { animation: mb-enter 320ms var(--mb-ease) both; }
+
+  .mb-progress { height: 16px; border-radius: 999px; background: var(--mb-line); overflow: hidden; }
+  .mb-progress > span {
+    display: block; height: 100%; border-radius: inherit; background: var(--color-green);
+    box-shadow: inset 0 4px 0 rgb(255 255 255 / .28);
+    transition: width 350ms cubic-bezier(.3,.9,.3,1.1);
+  }
+
+  /* Legacy component names kept so older screens keep rendering. */
+  .duo-shell { background: var(--mb-page); color: var(--mb-text); }
+  .duo-card { border: 2px solid var(--mb-line); border-radius: 20px; background: var(--mb-surface); }
+  .duo-card-soft { border: 2px solid var(--mb-line); border-radius: 20px; background: var(--mb-mist); }
+  .duo-eyebrow { color: var(--color-sky); font-size: .8rem; font-weight: 800; }
+  .duo-title { font-family: var(--font-display); font-weight: 700; letter-spacing: -.01em; line-height: 1.1; color: var(--mb-text); }
+  .duo-copy { color: var(--mb-muted); line-height: 1.5; }
+  .duo-button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: 16px; padding: .7rem 1.3rem; font-family: var(--font-display); font-weight: 600; font-size: 1rem; transition: transform 80ms ease; }
+  .duo-button:active { transform: translateY(4px); box-shadow: none !important; }
+  .duo-button-primary { background: var(--color-green); box-shadow: 0 4px 0 var(--color-green-press); color: white; }
+  .duo-button-secondary { background: var(--color-sky); box-shadow: 0 4px 0 var(--color-sky-press); color: white; }
+  .duo-button-outline { border: 2px solid var(--mb-line); background: var(--mb-surface); box-shadow: 0 4px 0 var(--mb-line); color: var(--mb-muted); }
+  .duo-progress { height: 14px; overflow: hidden; border-radius: 999px; background: var(--mb-line); }
+  .duo-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--color-green); transition: width 300ms ease; }
+
+  .mb-pop { animation: mb-pop 280ms cubic-bezier(.2,.9,.25,1.2) both; }
+  .mb-rise { animation: mb-rise 240ms cubic-bezier(.2,.9,.3,1) both; }
+  .mb-bob { animation: mb-bob 1.8s ease-in-out infinite; }
 }
 
-@keyframes duo-pop { from { opacity: 0; transform: scale(.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-@keyframes duo-celebrate { 0% { transform: scale(.92); } 55% { transform: scale(1.045); } 100% { transform: scale(1); } }
+@keyframes mb-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes mb-pop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+@keyframes mb-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes mb-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

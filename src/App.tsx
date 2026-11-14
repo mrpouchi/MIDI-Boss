@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pianoSynth } from './audio/synth';
 import { CODE_TO_MIDI } from './input/keyboardMap';
-import { WebMidiController } from './input/midi';
+import { MidiRawListener, WebMidiController } from './input/midi';
+import { NoteEventListener } from './input/types';
 import { MidiState } from './input/types';
-import { VoicingStep } from './music/chords';
 import { decodeIrealSong, IrealSong } from './music/ireal';
-import {
-  GUIDED_SONGS,
-  STEP_XP_TARGET,
-  getNextStepForSong,
-} from './practice/curriculum';
+import { GUIDED_SONGS, getNextStepForSong } from './practice/curriculum';
 import { makeSpacedCardKey, updateSpacedCard } from './practice/spacedRepetition';
 import { PracticeConfig, SessionSummary } from './practice/types';
 import {
@@ -25,6 +21,7 @@ import {
   SongProgress,
   SpacedCard,
   StoredData,
+  PlayAlongRun,
   StoredMidiSetup,
 } from './storage/types';
 import { SettingsDrawer } from './ui/components/SettingsDrawer';
@@ -32,7 +29,10 @@ import { AppTab, TopNav } from './ui/components/TopNav';
 import { PlayScreen } from './ui/screens/PlayScreen';
 import { LibraryScreen } from './ui/screens/LibraryScreen';
 import { ProgressScreen } from './ui/screens/ProgressScreen';
-import { TodayScreen } from './ui/screens/TodayScreen';
+import { PathScreen } from './ui/screens/PathScreen';
+import { PlayAlongScreen } from './ui/screens/PlayAlongScreen';
+import { LocalSongFile } from './content/localSongs';
+import { PathSong, SongObjective } from './content/songPath';
 
 export default function App() {
   const [storedData, setStoredData] = useState<StoredData>(() => loadStoredData());
@@ -40,10 +40,29 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [launchConfig, setLaunchConfig] = useState<PracticeConfig | null>(null);
+  const [playAlong, setPlayAlong] = useState<{
+    local: LocalSongFile;
+    ireal: IrealSong;
+    goal?: { song: PathSong; objective: SongObjective };
+  } | null>(null);
+  const playAlongOpenRef = useRef(false);
+  playAlongOpenRef.current = playAlong !== null;
   const [launchInConfigMode, setLaunchInConfigMode] = useState(false);
   const [playSessionKey, setPlaySessionKey] = useState(0);
 
   const midiControllerRef = useRef<WebMidiController | null>(null);
+  // Timestamped note stream (performance.now() clock) for timing-sensitive
+  // exercises: MIDI, computer keyboard and on-screen keys all feed it.
+  const noteListenersRef = useRef(new Set<NoteEventListener>());
+  const emitNote = useCallback((note: number, on: boolean, timeMs: number) => {
+    noteListenersRef.current.forEach((listener) => listener(note, on, timeMs));
+  }, []);
+  const subscribeNoteEvents = useCallback((listener: NoteEventListener) => {
+    noteListenersRef.current.add(listener);
+    return () => {
+      noteListenersRef.current.delete(listener);
+    };
+  }, []);
   const [midiState, setMidiState] = useState<MidiState>({
     status: 'initializing',
     devices: [],
@@ -104,7 +123,8 @@ export default function App() {
       setMidiState(state);
     });
 
-    const unsubNote = controller.onNoteEvent((note, isDown, velocity) => {
+    const unsubNote = controller.onNoteEvent((note, isDown, velocity, timeMs) => {
+      emitNote(note, isDown, timeMs);
       if (isDown) {
         pianoSynth.noteOn(note, velocity);
         setMidiNotes((prev) => {
@@ -140,7 +160,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activeTab !== 'play') return;
+      if (activeTab !== 'play' && !playAlongOpenRef.current) return;
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
 
       const target = e.target as HTMLElement | null;
@@ -158,6 +178,7 @@ export default function App() {
       if (midi === undefined) return;
 
       e.preventDefault();
+      emitNote(midi, true, e.timeStamp || performance.now());
       pianoSynth.noteOn(midi, 92);
       setKeyboardNotes((prev) => {
         if (prev.has(midi)) return prev;
@@ -171,6 +192,7 @@ export default function App() {
       const midi = CODE_TO_MIDI[e.code];
       if (midi === undefined) return;
 
+      emitNote(midi, false, e.timeStamp || performance.now());
       pianoSynth.noteOff(midi);
       setKeyboardNotes((prev) => {
         if (!prev.has(midi)) return prev;
@@ -207,6 +229,7 @@ export default function App() {
   }, [midiNotes, keyboardNotes, virtualMomentaryNotes, virtualLatchNotes]);
 
   const handlePressVirtualNote = useCallback((midi: number) => {
+    emitNote(midi, true, performance.now());
     pianoSynth.noteOn(midi, 92);
     setVirtualMomentaryNotes((prev) => {
       const next = new Set(prev);
@@ -216,6 +239,7 @@ export default function App() {
   }, []);
 
   const handleReleaseVirtualNote = useCallback((midi: number) => {
+    emitNote(midi, false, performance.now());
     pianoSynth.noteOff(midi);
     setVirtualMomentaryNotes((prev) => {
       if (!prev.has(midi)) return prev;
@@ -230,9 +254,11 @@ export default function App() {
       const next = new Set(prev);
       if (next.has(midi)) {
         next.delete(midi);
+        emitNote(midi, false, performance.now());
         pianoSynth.noteOff(midi);
       } else {
         next.add(midi);
+        emitNote(midi, true, performance.now());
         pianoSynth.noteOn(midi, 88);
       }
       return next;
@@ -248,6 +274,10 @@ export default function App() {
       prev.forEach((midi) => pianoSynth.noteOff(midi));
       return new Set();
     });
+  }, []);
+
+  const subscribeMidiRaw = useCallback((listener: MidiRawListener) => {
+    return midiControllerRef.current?.onRawEvent(listener) ?? (() => undefined);
   }, []);
 
   const handleUpdateSettings = useCallback((patch: Partial<AppSettings>) => {
@@ -309,54 +339,16 @@ export default function App() {
     setActiveTab('play');
   }, []);
 
-  const handleRecordSongStepXp = useCallback(
-    (
-      songId: string,
-      step: VoicingStep,
-      newXp: number,
-      unlockedNextStep?: VoicingStep | null,
-    ) => {
-      setStoredData((prev) => {
-        const song = GUIDED_SONGS.find((s) => s.id === songId);
-        if (!song) return prev;
-
-        const baseSongProgress = prev.isDemoData ? {} : { ...prev.songProgress };
-        const prevProg = baseSongProgress[songId];
-        const completed = new Set(prevProg?.completedSteps ?? []);
-        if (newXp >= STEP_XP_TARGET) {
-          completed.add(step);
-        }
-
-        const currentUnlocked = prevProg?.unlockedStep ?? song.availableSteps[0];
-        const currentIdx = song.availableSteps.indexOf(currentUnlocked);
-        const nextIdx = unlockedNextStep
-          ? song.availableSteps.indexOf(unlockedNextStep)
-          : currentIdx;
-        const unlockedStep =
-          unlockedNextStep && nextIdx > currentIdx
-            ? unlockedNextStep
-            : currentUnlocked;
-
-        baseSongProgress[songId] = {
-          songId,
-          unlockedStep,
-          completedSteps: Array.from(completed),
-          stepXp: {
-            ...(prevProg?.stepXp ?? {}),
-            [step]: Math.min(STEP_XP_TARGET, newXp),
-          },
-          lastPracticedAt: new Date().toISOString(),
-        };
-
-        return {
-          ...prev,
-          isDemoData: false,
-          songProgress: baseSongProgress,
-        };
-      });
-    },
-    [],
-  );
+  const handleFinishPlayAlong = useCallback((run: PlayAlongRun, session: SessionSummary) => {
+    setStoredData((prev) => ({
+      ...prev,
+      isDemoData: false,
+      playAlongRuns: [...(prev.playAlongRuns ?? []), run].slice(-200),
+    }));
+    // Each chord also feeds per-chord statistics and spaced repetition.
+    handleCompleteSessionRef.current(session);
+  }, []);
+  const handleCompleteSessionRef = useRef<(summary: SessionSummary) => void>(() => undefined);
 
   const handleCompleteSession = useCallback((summary: SessionSummary) => {
     setStoredData((prev) => {
@@ -421,7 +413,7 @@ export default function App() {
         );
       }
 
-      if (summary.songId && summary.step && summary.accuracy >= 80) {
+      if (summary.songId && summary.step && summary.songStepValidated) {
         const song = GUIDED_SONGS.find((s) => s.id === summary.songId);
         if (song) {
           const prevProg = baseSongProgress[song.id];
@@ -438,10 +430,6 @@ export default function App() {
             songId: song.id,
             unlockedStep,
             completedSteps: Array.from(completed),
-            stepXp: {
-              ...(prevProg?.stepXp ?? {}),
-              [summary.step]: STEP_XP_TARGET,
-            },
             lastPracticedAt: nowIso,
           };
         }
@@ -472,27 +460,38 @@ export default function App() {
       };
     });
   }, []);
+  handleCompleteSessionRef.current = handleCompleteSession;
 
   return (
     <div className="duo-shell min-h-screen transition-colors duration-200">
       <TopNav
         activeTab={activeTab}
         onSelectTab={(tab) => {
-          if (tab === 'play' && activeTab !== 'play') {
-            setLaunchInConfigMode(false);
+          // "Pratique libre" always opens the session configurator.
+          if (tab === 'play') {
+            handleOpenConfigurer();
+            return;
           }
           setActiveTab(tab);
         }}
         onOpenSettings={() => setSettingsOpen(true)}
+        midiState={midiState}
+        theme={storedData.settings.theme}
+        onToggleTheme={() =>
+          handleUpdateSettings({
+            theme: storedData.settings.theme === 'dark' ? 'light' : 'dark',
+          })
+        }
       />
 
-      <main className="px-4 py-7 sm:px-6 sm:py-10">
+      <main key={activeTab} className="mb-enter px-4 pt-6 pb-28 sm:px-8 lg:ml-60 lg:pt-10 lg:pb-12">
         {activeTab === 'today' && (
-          <TodayScreen
+          <PathScreen
             storedData={storedData}
             midiState={midiState}
             onStartPractice={handleStartPractice}
-            onOpenConfigurer={handleOpenConfigurer}
+            onPlayAlong={(local, ireal, goal) => setPlayAlong({ local, ireal, goal })}
+            onOpenLibrary={() => setActiveTab('library')}
           />
         )}
 
@@ -502,6 +501,7 @@ export default function App() {
             midiSetups={storedData.midiSetups ?? {}}
             onImport={handleImportIrealLibrary}
             onPlay={handleStartIrealSong}
+            onPlayAlong={(local, ireal) => setPlayAlong({ local, ireal })}
             onSaveMidiSetup={handleSaveMidiSetup}
           />
         )}
@@ -512,7 +512,6 @@ export default function App() {
             settings={storedData.settings}
             onUpdateSettings={handleUpdateSettings}
             songProgress={storedData.songProgress}
-            onRecordSongStepXp={handleRecordSongStepXp}
             midiState={midiState}
             activeNotes={activeNotes}
             virtualLatchNotes={Array.from(virtualLatchNotes)}
@@ -536,6 +535,26 @@ export default function App() {
         )}
       </main>
 
+      {playAlong && (
+        <PlayAlongScreen
+          key={`${playAlong.local.fileName}:${playAlong.goal?.objective.id ?? 'free'}`}
+          localSong={playAlong.local}
+          irealSong={playAlong.ireal}
+          objective={playAlong.goal}
+          settings={storedData.settings}
+          onUpdateSettings={handleUpdateSettings}
+          activeNotes={activeNotes}
+          virtualLatchNotes={Array.from(virtualLatchNotes)}
+          onPressVirtualNote={handlePressVirtualNote}
+          onReleaseVirtualNote={handleReleaseVirtualNote}
+          onToggleLatchNote={handleToggleLatchNote}
+          onClearVirtualLatchNotes={handleClearVirtualLatchNotes}
+          subscribeNoteEvents={subscribeNoteEvents}
+          onFinish={handleFinishPlayAlong}
+          onClose={() => setPlayAlong(null)}
+        />
+      )}
+
       <SettingsDrawer
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -546,6 +565,7 @@ export default function App() {
           void midiControllerRef.current?.refresh();
         }}
         onSelectMidiDevice={(id) => midiControllerRef.current?.selectDevice(id)}
+        subscribeMidiRaw={subscribeMidiRaw}
         isDemoData={storedData.isDemoData}
         onRestoreDemoData={() =>
           setStoredData((prev) => createDemoData(prev.settings))

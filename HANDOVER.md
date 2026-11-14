@@ -1,61 +1,118 @@
 # HANDOVER — MIDI Boss
 
-## Design system — Duolingo-inspired adaptation (13 novembre 2026)
+## État actuel — à lire en premier (13 novembre 2026, soir)
 
-- Audit des références réalisé : règles publiques de couleur/typo/copy du dépôt `virgiliojr94/duolingo-ux-reference` et structure UI/CSS de `Abhijit-Kumar-GitHub/duolingo-clone`. Aucune police, marque ou asset propriétaire n'a été copié.
-- `src/index.css` centralise maintenant une palette sémantique (green/blue/red/yellow + neutres), la typographie arrondie avec fallbacks système, rayons, ombres de pression, focus visible, composants `duo-*` et animations `duo-pop`/`duo-celebrate` respectueuses de `prefers-reduced-motion`.
-- Application initiale aux surfaces les plus visibles : shell, navigation, Aujourd'hui, Progrès, configurateur, bilan et leçon MIDI. Les fonctionnalités métier/MIDI n'ont pas été touchées.
-- Vérification technique : lint et build passent, Vite renvoie HTTP 200. La capture de screenshots automatisée n'a pas été possible : l'hôte navigateur CUA était indisponible dans cette session. À reprendre par une QA visuelle desktop/mobile réelle.
+Cette section prévaut sur tout le reste du document. Le plan complet (audit, architecture cible, étapes)
+est dans [docs/AUDIT_AND_ROADMAP.md](docs/AUDIT_AND_ROADMAP.md).
 
-## Reprise immédiate — leçon du jour / bug de validation (priorité 1)
+### Mission
 
-Mise à jour : 13 novembre 2026, fin de session. Cette section prévaut sur les notes historiques ci-dessous.
+Transformer l’application en plateforme d’apprentissage de l’**harmonie jazz au clavier** (pas de piano
+classique) : parcours depuis zéro, chansons réutilisables avec objectifs cumulatifs, arbre de compétences,
+système adaptatif par dimension (notes, rythme, durée, changements…), MIDI obligatoire (claviers 25 touches,
+matériel de l’utilisateur : Novation Bass Station II), refonte UX inspirée de Duolingo, **aucune récompense
+artificielle** (pas d’XP, pièces, séries), aucune fausse donnée.
 
-### Demande produit en cours
+### Fait dans cette session (phase A)
 
-Transformer l’expérience en apprentissage progressif de piano : l’utilisateur doit pouvoir **écouter et regarder**, puis **reproduire** le geste. Le flux doit rester compréhensible pour une personne qui ne connaît pas les touches du piano. L’option doit être activable/désactivable dans les réglages.
+- **Bug de cascade de la leçon du jour : cause racine trouvée et corrigée.** Chaque accord réussi
+  sauvegardait de l’XP → nouvel objet `songProgress` → `startWithConfig` recréé → l’effet de lancement
+  **redémarrait la séance**. `startWithConfig` est désormais stable (lecture via refs) ; l’effet de lancement
+  ne se déclenche que pour une nouvelle config. Les verrous ajoutés auparavant sont conservés mais n’étaient
+  pas la solution. L’avance automatique ajoutée par la session précédente (inopérante) est retirée.
+  Couvert par `src/ui/screens/__tests__/PlayScreen.lesson.test.tsx`. **Reste à confirmer avec le vrai clavier.**
+- **XP supprimée** partout (barre, « +XP », 100 XP par palier) ainsi que l’objectif quotidien en nombre
+  d’accords. Une étape de chanson est validée par une séance complète à ≥ 80 % (seuil à valider).
+  `SongProgress.stepXp` reste optionnel dans le type pour les anciennes sauvegardes, jamais lu.
+- **MIDI horodaté** : `parseMidiMessage` (pur, testé), `timeMs` transmis avec chaque note, et **moniteur
+  MIDI** dans Réglages (visible quand un appareil est connecté) : messages, écart en ms, nombre de notes
+  tenues. Sert à vérifier que la Bass Station II envoie un Note On par touche tenue.
+- **Arbre de compétences réel** : `src/content/skills.ts` (données) + `src/practice/mastery.ts` (calcul à
+  partir des cartes de répétition espacée et des statistiques). Statuts : maîtrisée / en cours / difficulté
+  récurrente / à découvrir / exercice à venir. Les anciens `practice/skills.ts` et `practice/adaptive.ts`
+  (factices, non commités) ont été supprimés, ainsi que les champs de dimension inventés d’`AttemptRecord`.
+- **Tests** : Vitest 5.0.5 + jsdom + Testing Library. `npm test` → 51 tests.
 
-### Implémenté et compilé
+### Refonte visuelle (même session) — voir [docs/DESIGN.md](docs/DESIGN.md)
 
-- `src/storage/types.ts` : ajout de `AppSettings.listenAndRepeatEnabled`.
-- `src/storage/localStore.ts` : option activée par défaut ; le chargement fusionne déjà `DEFAULT_SETTINGS`, donc les anciennes sauvegardes restent compatibles.
-- `src/ui/components/SettingsDrawer.tsx` : interrupteur **« Écouter puis reproduire »** dans « Son et clavier d’aide ».
-- `src/ui/screens/PlayScreen.tsx` : pour chaque défi, le mode actif joue un accord modèle, force l’affichage de l’aide clavier et des noms de notes, puis affiche « Étape 2 · À vous de reproduire ».
-- `src/ui/components/TopNav.tsx` et `src/ui/screens/TodayScreen.tsx` : première passe UX visible (« Piano Path », couleurs vertes, leçon quotidienne expliquée en étapes). Ce travail est secondaire face au bug ci-dessous.
+- Nom **MIDI Boss**, mascotte originale « Boss » (`ui/components/Mascot.tsx`, SVG, humeurs idle/happy/oops/listen),
+  thème clair par défaut (bascule dans la barre latérale), polices Fredoka + Nunito.
+- `index.css` : tokens de marque (ink, green, brass, sky, coral) + palettes Tailwind `stone/slate/indigo/emerald/
+  rose/amber/violet` **remappées** sur l’identité, pour que les écrans pas encore refaits suivent déjà.
+- Barre latérale (`TopNav.tsx`, barre d’onglets en bas sur petit écran) ; écran **Parcours** (`PathScreen.tsx`)
+  qui remplace Aujourd’hui (supprimé) ; **leçon plein écran** (PlayScreen) : mascotte qui parle, accord en
+  grand, notes qui s’allument, clavier central, pied de page vert/corail avec Continuer.
+- Bug corrigé au passage : quitter une leçon après un seul accord **validait l’étape du morceau**. La règle est
+  maintenant unique : `isSongStepValidated` (séance terminée, tous les accords du morceau joués à l’étape, ≥ 80 %).
+- **Arbre de compétences façon jeu vidéo** (`ui/components/SkillTree.tsx`, SVG) : tronc Fondations, branches Harmonie / Application, couronne Jazz ; nœuds lumineux si maîtrisés, compteurs réels `x/y` (`SkillAssessment.progress`), cadenas pour « exercice à venir », badge « ! » pour difficulté récurrente, infobulle au survol (ou au focus clavier ; un tap la fixe sur écran tactile). Positions dans le composant (présentation), données dans `content/skills.ts`.
+- Captures : Brave headless piloté via CDP (script hors dépôt). Restent au style hérité : Chansons (Library),
+  configurateur, bilan, réglages.
 
-### Blocage actif : cascade dans la leçon du jour
+### Jouer avec l’orchestre (même session)
 
-Le bug est **toujours présent**, confirmé par l’utilisateur, et **ne survient que dans la Leçon du jour** (`PracticeConfig.mode === 'lesson'`). Scénario rapporté : le premier accord est joué, le suivant est proposé ; quand le second est joué correctement, le premier et le second se déclenchent/avancent successivement de manière incontrôlée.
+- **Dossier `local-songs/`** (ignoré par git, seul son README est versionné) : l’utilisateur y dépose ses MIDI
+  (exports iReal). `src/content/localSongs.ts` les détecte (glob Vite). Ne jamais commiter ces fichiers.
+- **Théorie** : familles `dim`, `m7b5`, `dim7` ; l’étape « fondamentale + quinte » garde la quinte diminuée.
+- **Grilles iReal** : `src/music/chart.ts` (pur, testé) — mesures, temps, reprises et 1re/2e fins dépliées,
+  « % », qualités iReal → famille validable, tensions écrites acceptées (♭9, 13…), orthographe conservée
+  (D♭maj7). D.C./D.S./Coda **non dépliés** (188/1460 morceaux) : signalé par `unsupportedJumps`.
+  Bug corrigé : `Dm7♭5` était lu comme Ré majeur ; style/tonalité iReal étaient décalés (réimporter la playlist).
+- **MIDI** : `src/audio/midiFile.ts` (helpers partagés avec le lecteur, `analyzeMidi`, `setMidiTempo`) ;
+  `src/audio/backingTrack.ts` : orchestre (basse + batterie, piano coupé ou guide), horloge du morceau ancrée
+  sur `performance.now()` via la position du lecteur (médiane), + calage réglable (`settings.playAlongLatencyMs`).
+- **Moteur** : `src/practice/playAlong.ts` (pur, testé) — timeline, `PlayAlongScorer` (fenêtres d’accord avec
+  anticipation, à l’heure ±180 ms, notes communes tenues acceptées, fausses notes), `summarize`.
+- **Notes horodatées** : `App` diffuse chaque note (MIDI `event.timeStamp`, clavier, écran) via
+  `subscribeNoteEvents`.
+- **Écran** `PlayAlongScreen` (onglet Chansons → Jouer avec l’orchestre) : réglages (étape, tempo 60/80/100 %,
+  piano guide, calage), décompte, ligne de 4 mesures, verdict par accord, bilan + conseil adaptatif.
+  Résultats → `StoredData.playAlongRuns` (compétences « Jouer en rythme » / « Accompagner ») et stats par accord.
+- Vérifié en navigateur headless (import playlist, Blue Bossa à 112 BPM, accord jugé +76 ms). **Non vérifié :
+  l’écoute réelle et la précision de synchro son/clavier** → à tester par l’utilisateur, ajuster le calage.
 
-Tentatives déjà intégrées dans `PlayScreen.tsx`, sans résolution utilisateur :
+### Parcours centré sur les chansons (même session)
 
-1. `awaitingRelease` : blocage de validation jusqu’au relâchement des touches après une réussite.
-2. `activeChallengeRef` / `resolvedChallengeRef` : identifiant `${currentIndex}:${chord.id}:${step}` pour empêcher une temporisation asynchrone obsolète de valider un autre défi.
-3. `lessonReadyToAdvance` : après une réussite de leçon, l’UI doit demander un clic explicite sur **Continuer** (bouton désactivé si des notes sont maintenues).
+- `src/content/songPath.ts` : 5 unités, 16 morceaux choisis par analyse des 1 460 grilles iReal (peu d’accords →
+  blues → latin/mineur → II-V-I → standards), aucun avec D.C./Coda. Chaque morceau : 5 objectifs cumulatifs
+  (fondamentales lent → +quinte lent → tierce moyen → septième moyen → tempo original). Tempos plafonnés :
+  lent = min(60 %, 100 BPM), moyen = min(80 %, 140 BPM) (So What est à 240).
+- `src/practice/songProgress.ts` (pur, testé) : un objectif est validé par une séance orchestre **complète**,
+  à l’étape ou plus difficile, au tempo ou plus vite, au-dessus des seuils notes/rythme. Chanson suivante
+  ouverte après **2 objectifs** de la précédente (décision à valider).
+- `PathScreen` réécrit : bandeau d’unité, carte de chanson (apport, notions, « MIDI à ajouter » / « Grille iReal
+  à importer »), chemin d’objectifs, chansons verrouillées compactées. L’ancienne micro-leçon devient
+  « Échauffement » dans la colonne de droite. Clic sur un objectif → `PlayAlongScreen` préréglé
+  (bandeau Objectif, verdict « Objectif atteint » à la fin). `PlayAlongRun.originalBpm` ajouté.
+- Correspondance fichier ↔ grille : `songTitleKey` ignore accents, ponctuation et « The » (Ipanema).
+- MIDI présents : Blue Bossa, So What, Autumn Leaves, The Girl From Ipanema (tous alignés : 3 tours de grille).
 
-Ne pas affirmer que ce bug est corrigé : il ne l’est pas. L’agent n’a pas pu reproduire visuellement, car l’hôte navigateur d’automatisation était indisponible ; la validation utilisateur prévaut.
+### Finition visuelle et responsive (même session)
 
-### Hypothèse et plan de diagnostic recommandé
+- Mouvement (`index.css`) : courbe ressort `--mb-spring` ; boutons qui montent au survol et s’enfoncent au clic,
+  `.mb-lift` (cartes), `.mb-node` (nœuds du parcours), `.mb-tree-node` (arbre SVG), `.mb-wiggle` (navigation),
+  `.mb-enter` (entrée d’écran). `prefers-reduced-motion` respecté.
+- Écrans hérités convertis aux tokens sémantiques (script de conversion : stone/slate/indigo → text/muted/line/
+  mist/sky, bordures 2 px, plus de monospace décoratif) : Compétences, Chansons, configurateur, bilan, réglages,
+  lecteur MIDI. Chansons réécrit (bibliothèque iReal paginée par 12, tonalités « C mineur »). Compétences :
+  « Paliers des chansons guidées » (ancien contenu) remplacé par « Vos chansons » (objectifs du parcours).
+- Responsive vérifié à 390 / 820 / 1440 px ; arbre de compétences défilant horizontalement sur mobile.
+- **Règle de jeu (demandée par l’utilisateur)** : l’apprenant joue **chaque mesure**. La timeline crée une cible
+  par mesure, « % » compris (`TimelineChord.repeat`) ; sur une mesure répétée, toutes les notes demandées doivent
+  être refrappées (tenir ne compte pas) ; sur un vrai changement, les notes communes peuvent rester tenues.
+  Le retard / l’avance se mesurent sur ces attaques. La mesure courante est calculée depuis l’horloge.
 
-Le flux `lesson` possède une file mutable (`queue`) et peut réinsérer des items après une erreur. Il faut instrumenter et reproduire l’ordre réel des événements avant d’ajouter un autre verrou :
+### Prochaines étapes
 
-1. Ajouter temporairement des logs bornés (ou un panneau debug) pour : `challengeKey`, `currentIndex`, `activeNotes`, `feedback`, `isTransitioningRef.current`, `resolvedChallengeRef.current`, et chaque création d’`AttemptRecord`.
-2. Reproduire avec le même périphérique que l’utilisateur ; distinguer clairement les `noteon` MIDI du clavier virtuel/ordinateur et l’audio d’aperçu (`pianoSynth.playChordPreview`).
-3. Vérifier si deux `AttemptRecord` sont ajoutés pour un même `challengeKey`, ou si l’impression de double déclenchement vient d’un item dupliqué dans `generateDuolingoMicroLesson` / de la requeue.
-4. Une fois la cause prouvée, simplifier le flux plutôt que d’empiler des verrous. Une solution robuste possible : un réducteur de séance à états explicites (`demonstrating` → `waiting-for-release` → `waiting-for-input` → `confirmed`) qui accepte des événements MIDI horodatés, avec une seule transition autorisée par défi.
+Phase B du plan : étendre la théorie (dim, m7b5…), format de chanson réel (Blue Bossa), objectifs de chanson
+cumulatifs, parcours depuis zéro, leçon pilotée par `practice/lessonMachine.ts` (pas encore branché).
 
-### Vérification connue
+### Commandes
 
-Après les dernières modifications :
+`npm run lint` · `npm test` · `npm run build` · `npm run dev` (http://localhost:3000/)
 
-```text
-npm run lint   # succès
-npm run build  # succès
-```
+---
 
-Le serveur Vite a été redémarré sur `http://localhost:3000/` pendant cette session. Faire un rechargement forcé avant un nouveau test manuel.
-
-Dernière mise à jour : 13 novembre 2026 (soir). Reprise par un nouvel agent : vérification automatisée du lecteur MIDI, correction du mapping des canaux et persistance du mixage. Ce document décrit uniquement l’état réellement observé dans le dépôt et dans la session de développement.
+## Historique (notes antérieures — peuvent être périmées)
 
 ## Objectif produit actuel
 
@@ -270,7 +327,7 @@ Important : ne pas augmenter la version sans prévoir une migration ; le chargeu
 - Avant d’ajouter une dépendance, vérifier qu’une dépendance déjà installée ne couvre pas le besoin et vérifier licence, taille, compatibilité Vite/browser.
 - Ne pas réinitialiser le worktree ni supprimer les changements non commit.
 
-## Git et modifications non commit
+## Git et modifications non commit (PÉRIMÉ : ces fichiers sont commités dans 7fe9742)
 
 Dernier commit de base : `273b893 feat: initialize project structure and base UI`.
 

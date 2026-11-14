@@ -79,6 +79,10 @@ export interface SessionSummary {
   families: ChordFamily[];
   chordsToReview: ChordDefinition[];
   attempts: AttemptRecord[];
+  /** The session reached its natural end (not stopped early with the close button). */
+  completedFully: boolean;
+  /** For guided songs: this session validated `step` of `songId`. */
+  songStepValidated: boolean;
 }
 
 export interface ProgressionPreset {

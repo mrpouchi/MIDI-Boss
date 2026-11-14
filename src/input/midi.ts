@@ -1,8 +1,46 @@
 import { MidiDeviceInfo, MidiState } from './types';
 
-export type MidiNoteListener = (note: number, isDown: boolean, velocity: number) => void;
+/**
+ * `timeMs` is the Web MIDI event timestamp (same clock as `performance.now()`),
+ * captured when the message arrived — not when React got around to rendering.
+ */
+export type MidiNoteListener = (
+  note: number,
+  isDown: boolean,
+  velocity: number,
+  timeMs: number,
+) => void;
 export type MidiStateListener = (state: MidiState) => void;
 export type MidiPanicListener = () => void;
+
+export type ParsedMidiMessage =
+  | { kind: 'note-on'; channel: number; note: number; velocity: number }
+  | { kind: 'note-off'; channel: number; note: number }
+  | { kind: 'control-change'; channel: number; controller: number; value: number }
+  | { kind: 'other'; status: number };
+
+export interface MidiRawEvent {
+  timeMs: number;
+  deviceName: string;
+  message: ParsedMidiMessage;
+}
+export type MidiRawListener = (event: MidiRawEvent) => void;
+
+/** Pure decoding of one MIDI message (channel numbers are 1–16). */
+export function parseMidiMessage(data: ArrayLike<number>): ParsedMidiMessage | null {
+  if (!data || data.length < 1) return null;
+  const statusByte = data[0];
+  const kind = statusByte & 0xf0;
+  const channel = (statusByte & 0x0f) + 1;
+  if (statusByte >= 0xf0) return { kind: 'other', status: statusByte };
+  if (data.length < 2) return { kind: 'other', status: statusByte };
+  const d1 = data[1];
+  const d2 = data.length > 2 ? data[2] : 0;
+  if (kind === 0x90 && d2 > 0) return { kind: 'note-on', channel, note: d1, velocity: d2 };
+  if (kind === 0x80 || kind === 0x90) return { kind: 'note-off', channel, note: d1 };
+  if (kind === 0xb0) return { kind: 'control-change', channel, controller: d1, value: d2 };
+  return { kind: 'other', status: statusByte };
+}
 
 export class WebMidiController {
   private midiAccess: MIDIAccess | null = null;
@@ -10,6 +48,7 @@ export class WebMidiController {
   private stateListeners = new Set<MidiStateListener>();
   private noteListeners = new Set<MidiNoteListener>();
   private panicListeners = new Set<MidiPanicListener>();
+  private rawListeners = new Set<MidiRawListener>();
   private currentState: MidiState = {
     status: 'initializing',
     devices: [],
@@ -80,6 +119,12 @@ export class WebMidiController {
     return () => this.noteListeners.delete(listener);
   }
 
+  /** Every incoming message from the active device, for the MIDI monitor. */
+  onRawEvent(listener: MidiRawListener): () => void {
+    this.rawListeners.add(listener);
+    return () => this.rawListeners.delete(listener);
+  }
+
   onPanic(listener: MidiPanicListener): () => void {
     this.panicListeners.add(listener);
     return () => this.panicListeners.delete(listener);
@@ -95,6 +140,7 @@ export class WebMidiController {
     this.stateListeners.clear();
     this.noteListeners.clear();
     this.panicListeners.clear();
+    this.rawListeners.clear();
   }
 
   private syncDevices(): void {
@@ -109,7 +155,8 @@ export class WebMidiController {
           manufacturer: input.manufacturer || '',
         });
       }
-      input.onmidimessage = (event) => this.handleMidiMessage(input.id, event);
+      const deviceName = input.name || 'Clavier MIDI';
+      input.onmidimessage = (event) => this.handleMidiMessage(input.id, deviceName, event);
     });
 
     if (devices.length === 0) {
@@ -139,31 +186,37 @@ export class WebMidiController {
     });
   }
 
-  private handleMidiMessage(inputId: string, event: MIDIMessageEvent): void {
+  private handleMidiMessage(
+    inputId: string,
+    deviceName: string,
+    event: MIDIMessageEvent,
+  ): void {
     if (this.activeDeviceId && inputId !== this.activeDeviceId) {
       return;
     }
-    const data = event.data;
-    if (!data || data.length < 2) return;
-
-    const status = data[0] & 0xf0;
-    const note = data[1];
-    const velocity = data.length > 2 ? data[2] : 0;
-
-    // Note On
-    if (status === 0x90 && velocity > 0) {
-      this.noteListeners.forEach((cb) => cb(note, true, velocity));
+    const message = event.data ? parseMidiMessage(event.data) : null;
+    if (!message) return;
+    // Clock (0xF8) and active sensing (0xFE) arrive many times per second and
+    // would flood the monitor without carrying anything useful for practice.
+    if (message.kind === 'other' && (message.status === 0xf8 || message.status === 0xfe)) {
       return;
     }
+    const timeMs = event.timeStamp || performance.now();
+    this.rawListeners.forEach((cb) => cb({ timeMs, deviceName, message }));
 
-    // Note Off (or Note On with velocity 0)
-    if (status === 0x80 || (status === 0x90 && velocity === 0)) {
-      this.noteListeners.forEach((cb) => cb(note, false, 0));
+    if (message.kind === 'note-on') {
+      this.noteListeners.forEach((cb) => cb(message.note, true, message.velocity, timeMs));
       return;
     }
-
+    if (message.kind === 'note-off') {
+      this.noteListeners.forEach((cb) => cb(message.note, false, 0, timeMs));
+      return;
+    }
     // All Notes Off / All Sound Off (CC 123 or CC 120)
-    if (status === 0xb0 && (note === 123 || note === 120)) {
+    if (
+      message.kind === 'control-change' &&
+      (message.controller === 123 || message.controller === 120)
+    ) {
       this.panicListeners.forEach((cb) => cb());
     }
   }

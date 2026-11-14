@@ -7,8 +7,7 @@ import {
   parseProgression,
 } from '../music/chords';
 import { SongProgress } from '../storage/types';
-
-export const STEP_XP_TARGET = 100;
+import { AttemptRecord } from './types';
 
 export interface GuidedSong {
   id: string;
@@ -136,16 +135,13 @@ export function getNextStepForSong(
   return song.availableSteps[idx + 1];
 }
 
-export function getSongStepXp(
+export function isSongStepCompleted(
   songId: string | undefined,
   step: VoicingStep,
   songProgress: Record<string, SongProgress>,
-): number {
-  if (!songId) return 0;
-  const progress = songProgress[songId];
-  if (!progress) return 0;
-  if (progress.completedSteps.includes(step)) return STEP_XP_TARGET;
-  return Math.min(STEP_XP_TARGET, progress.stepXp?.[step] ?? 0);
+): boolean {
+  if (!songId) return false;
+  return songProgress[songId]?.completedSteps.includes(step) ?? false;
 }
 
 export function getSongStepLabel(song: GuidedSong, step: VoicingStep): string {
@@ -174,18 +170,17 @@ export function getSongStepShortLabel(song: GuidedSong, step: VoicingStep): stri
   return `${order} · Accord complet`;
 }
 
+/** Share of the song's steps validated by a successful full session. */
 export function getStepProgressPercent(
   song: GuidedSong,
   songProgress: Record<string, SongProgress>,
 ): number {
   const progress = songProgress[song.id];
   if (!progress) return 0;
-  const totalXpPossible = song.availableSteps.length * STEP_XP_TARGET;
-  let earnedXp = 0;
-  for (const step of song.availableSteps) {
-    earnedXp += getSongStepXp(song.id, step, songProgress);
-  }
-  return Math.min(100, Math.round((earnedXp / totalXpPossible) * 100));
+  const done = song.availableSteps.filter((step) =>
+    progress.completedSteps.includes(step),
+  ).length;
+  return Math.round((done / song.availableSteps.length) * 100);
 }
 
 export function getRecommendedActiveSong(
@@ -208,4 +203,29 @@ export function getMaxStepIndex(step: VoicingStep): number {
 
 export function getDefaultStepMetaLabel(step: VoicingStep): string {
   return VOICING_STEPS[step].labelFr;
+}
+
+/** Minimum share of correct attempts on the song's chords to validate a step (to be confirmed with the user). */
+export const SONG_STEP_PASS_ACCURACY = 0.8;
+
+/**
+ * A song step is validated only by a session that reached its natural end and
+ * in which every chord of the song was played at that step, with enough
+ * accuracy. Quitting early, or succeeding on unrelated review chords, never
+ * unlocks the next step.
+ */
+export function isSongStepValidated(params: {
+  song: GuidedSong;
+  step: VoicingStep;
+  attempts: AttemptRecord[];
+  completedFully: boolean;
+}): boolean {
+  const { song, step, attempts, completedFully } = params;
+  if (!completedFully || !song.availableSteps.includes(step)) return false;
+  const songChordIds = new Set(getSongChords(song, 'intl').map((c) => c.id));
+  const relevant = attempts.filter((a) => a.step === step && songChordIds.has(a.chord.id));
+  const covered = new Set(relevant.map((a) => a.chord.id));
+  if (covered.size < songChordIds.size) return false;
+  const correct = relevant.filter((a) => a.outcome === 'correct').length;
+  return correct / relevant.length >= SONG_STEP_PASS_ACCURACY;
 }

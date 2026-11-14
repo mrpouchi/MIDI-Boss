@@ -17,6 +17,8 @@ export interface AppSettings {
   showKeyboardHelper: boolean;
   showKeyboardNotes: boolean;
   dailyGoalChords: number;
+  /** Play-along: compensates audio output + input latency (ms). Optional for old saves. */
+  playAlongLatencyMs?: number;
 }
 
 export interface ChordStat {
@@ -49,6 +51,7 @@ export interface SongProgress {
   songId: string;
   unlockedStep: VoicingStep;
   completedSteps: VoicingStep[];
+  /** @deprecated XP was removed; old saves may still contain it. Never read. */
   stepXp?: Partial<Record<VoicingStep, number>>;
   lastPracticedAt: string;
 }
@@ -80,6 +83,25 @@ export interface SessionRecord {
   families: ChordFamily[];
 }
 
+export interface PlayAlongRun {
+  id: string;
+  date: string;
+  songTitle: string;
+  step: VoicingStep;
+  bpm: number;
+  /** Tempo of the original file, to tell slow / medium / original runs apart. */
+  originalBpm?: number;
+  /** Chords to play / found / on time. */
+  total: number;
+  found: number;
+  onTime: number;
+  noteAccuracy: number;
+  timingAccuracy: number;
+  meanOffsetMs: number | null;
+  /** The run reached the end of the song. */
+  completed: boolean;
+}
+
 export interface StoredData {
   version: 1;
   isDemoData: boolean;
@@ -89,5 +111,7 @@ export interface StoredData {
   songProgress: Record<string, SongProgress>;
   sessions: SessionRecord[];
   irealLibrary?: IrealSong[];
+  /** Results of "play with the band" runs (rhythm evidence). Optional for old saves. */
+  playAlongRuns?: PlayAlongRun[];
   midiSetups?: Record<string, StoredMidiSetup>;
 }

@@ -1,5 +1,6 @@
 import initIreal, { parseIrealb } from '@chordsketch/wasm';
-import { ChordDefinition, createChord } from './chords';
+import { ChordChart, RawChart, chartChordSequence, chartFromParsed } from './chart';
+import { ChordDefinition } from './chords';
 
 export interface IrealSong {
   id: string;
@@ -50,7 +51,13 @@ export function readIrealPlaylist(html: string): IrealSong[] {
 
       const fields = encodedSong.split('=');
       if (fields.length < 6) continue;
-      const [title, composer, style, key] = fields.map(decodeField);
+      // irealb entries: Title=Composer=(empty)=Style=Key=Transpose=Music…
+      // (older irealbook links have no empty field: Title=Composer=Style=Key…).
+      const decoded = fields.map(decodeField);
+      const [title, composer] = decoded;
+      const shifted = decoded[2] === '';
+      const style = shifted ? decoded[3] : decoded[2];
+      const key = shifted ? decoded[4] : decoded[3];
       if (!title) continue;
       songs.push({
         id: songId(sourceUrl),
@@ -66,45 +73,13 @@ export function readIrealPlaylist(html: string): IrealSong[] {
   return songs;
 }
 
-function rootToPitchClass(root: { note: string; accidental: string }) {
-  const naturals: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-  const base = naturals[root.note];
-  if (base === undefined) return null;
-  if (root.accidental === 'sharp') return (base + 1) % 12;
-  if (root.accidental === 'flat') return (base + 11) % 12;
-  return base;
-}
-
-function toPracticeChord(raw: { root: { note: string; accidental: string }; quality: { kind: string; value?: string } }) {
-  const root = rootToPitchClass(raw.root);
-  if (root === null) return null;
-  const kind = `${raw.quality.kind} ${raw.quality.value ?? ''}`.toLowerCase();
-  const custom = raw.quality.value?.toLowerCase() ?? '';
-  if (kind.includes('sus2')) return createChord(root, 'sus2');
-  if (kind.includes('sus')) return createChord(root, 'sus4');
-  // iReal's compact custom qualities use '-' for minor and '^' for major.
-  if (custom.startsWith('-')) return createChord(root, /7|9|11|13/.test(custom) ? 'm7' : 'min');
-  if (custom.startsWith('^')) return createChord(root, /7|9|11|13/.test(custom) ? 'maj7' : 'maj');
-  if (kind.includes('minor')) return createChord(root, kind.includes('7') || kind.includes('9') || kind.includes('11') || kind.includes('13') ? 'm7' : 'min');
-  if (kind.includes('major')) return createChord(root, kind.includes('7') || kind.includes('9') || kind.includes('13') ? 'maj7' : 'maj');
-  if (kind.includes('dominant') || kind.includes('7') || kind.includes('9') || kind.includes('13') || kind.includes('altered')) return createChord(root, '7');
-  return createChord(root, 'maj');
-}
-
-export async function decodeIrealSong(song: IrealSong): Promise<ChordDefinition[]> {
+/** Full bar-by-bar chart of an iReal song (repeats expanded). */
+export async function decodeIrealChart(song: IrealSong): Promise<ChordChart> {
   await ensureIrealReady();
-  const parsed = JSON.parse(parseIrealb(song.sourceUrl)) as {
-    sections: Array<{ bars: Array<{ chords: Array<{ chord: unknown; size?: string }> }> }>;
-  };
-  const chords: ChordDefinition[] = [];
-  for (const section of parsed.sections) {
-    for (const bar of section.bars) {
-      for (const item of bar.chords) {
-        if (item.size === 'small' || !item.chord) continue;
-        const chord = toPracticeChord(item.chord as Parameters<typeof toPracticeChord>[0]);
-        if (chord) chords.push(chord);
-      }
-    }
-  }
-  return chords;
+  return chartFromParsed(JSON.parse(parseIrealb(song.sourceUrl)) as RawChart);
+}
+
+/** Linear list of chord changes, for the simple progression mode. */
+export async function decodeIrealSong(song: IrealSong): Promise<ChordDefinition[]> {
+  return chartChordSequence(await decodeIrealChart(song));
 }

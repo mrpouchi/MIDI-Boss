@@ -125,36 +125,36 @@ export function SessionConfigPanel({
 
   return (
     <div className="duo-card mx-auto max-w-3xl p-6 sm:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200 pb-5 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-5">
         <div>
           <h2 className="duo-title text-xl">
             Configurer votre entraînement
           </h2>
-          <p className="mt-1 text-sm text-stone-500 dark:text-slate-400">
+          <p className="mt-1 text-sm text-muted">
             Sur les chansons guidées, chaque étape se débloque après avoir validé la précédente.
           </p>
         </div>
 
-        <div className="inline-flex rounded-xl border border-stone-200 bg-stone-100 p-1 dark:border-slate-800 dark:bg-slate-900/80">
+        <div className="inline-flex rounded-xl border-2 border-line bg-mist p-1">
           <button
             type="button"
             onClick={() => setMode('session')}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-              mode === 'session'
-                ? 'bg-white text-stone-900 shadow-xs dark:bg-indigo-500 dark:text-white'
-                : 'text-stone-600 hover:text-stone-900 dark:text-slate-400 dark:hover:text-slate-100'
-            }`}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+ mode === 'session'
+ ? 'bg-surface text-text shadow-xs dark:text-white'
+ : 'text-muted hover:text-text '
+ }`}
           >
             Session libre
           </button>
           <button
             type="button"
             onClick={() => setMode('progression')}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-              mode === 'progression'
-                ? 'bg-white text-stone-900 shadow-xs dark:bg-indigo-500 dark:text-white'
-                : 'text-stone-600 hover:text-stone-900 dark:text-slate-400 dark:hover:text-slate-100'
-            }`}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+ mode === 'progression'
+ ? 'bg-surface text-text shadow-xs dark:text-white'
+ : 'text-muted hover:text-text '
+ }`}
           >
             Chanson / Progression
           </button>
@@ -164,7 +164,7 @@ export function SessionConfigPanel({
       {mode === 'session' ? (
         <div className="mt-6 space-y-6">
           <div>
-            <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+            <span className="block text-sm font-semibold text-text">
               Niveau d’étape (difficulté progressive)
             </span>
             <div className="mt-2.5 grid gap-2 sm:grid-cols-4">
@@ -178,51 +178,51 @@ export function SessionConfigPanel({
                     aria-pressed={active}
                     onClick={() => setSessionStep(stepId)}
                     className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                      active
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-950 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-100'
-                        : 'border-stone-200 bg-stone-50/50 text-stone-600 hover:border-stone-300 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400 dark:hover:border-slate-700'
-                    }`}
+ active
+ ? 'border-sky bg-sky/10 text-text '
+ : 'border-line bg-mist text-muted hover:border-line '
+ }`}
                   >
                     <div className="text-xs font-semibold">{meta.shortLabelFr}</div>
                   </button>
                 );
               })}
             </div>
-            <p className="mt-1.5 text-xs text-stone-500 dark:text-slate-400">
+            <p className="mt-1.5 text-xs text-muted">
               {VOICING_STEPS[sessionStep].descriptionFr}
             </p>
           </div>
 
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="text-sm font-medium text-stone-800 dark:text-slate-200">
+              <label className="text-sm font-semibold text-text">
                 Familles d’accords
               </label>
               <div className="flex items-center gap-3 text-xs">
                 <button
                   type="button"
                   onClick={() => setFamilies(['maj', 'min', 'sus2', 'sus4'])}
-                  className="text-stone-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
+                  className="text-muted hover:text-sky-press"
                 >
                   Triades & Sus
                 </button>
-                <span aria-hidden="true" className="text-stone-300 dark:text-slate-700">
+                <span aria-hidden="true" className="text-line">
                   ·
                 </span>
                 <button
                   type="button"
                   onClick={() => setFamilies(['7', 'maj7', 'm7'])}
-                  className="text-stone-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
+                  className="text-muted hover:text-sky-press"
                 >
                   Accords de 7e
                 </button>
-                <span aria-hidden="true" className="text-stone-300 dark:text-slate-700">
+                <span aria-hidden="true" className="text-line">
                   ·
                 </span>
                 <button
                   type="button"
                   onClick={() => setFamilies(ALL_CHORD_FAMILIES)}
-                  className="text-stone-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300"
+                  className="text-muted hover:text-sky-press"
                 >
                   Toutes
                 </button>
@@ -240,13 +240,13 @@ export function SessionConfigPanel({
                     aria-pressed={active}
                     onClick={() => toggleFamily(family)}
                     className={`flex flex-col items-start rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
-                      active
-                        ? 'border-indigo-500 bg-indigo-50/90 text-indigo-950 dark:border-indigo-400/70 dark:bg-indigo-500/15 dark:text-indigo-100'
-                        : 'border-stone-200 bg-stone-50/50 text-stone-600 hover:border-stone-300 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400 dark:hover:border-slate-700'
-                    }`}
+ active
+ ? 'border-sky bg-sky/10 text-text '
+ : 'border-line bg-mist text-muted hover:border-line '
+ }`}
                   >
                     <span className="text-sm font-semibold">{meta.labelFr}</span>
-                    <span className="mt-0.5 font-mono text-xs opacity-75">
+                    <span className="mt-0.5 tabular-nums text-xs opacity-75">
                       {meta.intervalLabels.join(' ')}
                     </span>
                   </button>
@@ -260,11 +260,11 @@ export function SessionConfigPanel({
               <div className="flex items-center justify-between text-sm">
                 <label
                   htmlFor="tempo-slider"
-                  className="font-medium text-stone-800 dark:text-slate-200"
+                  className="font-semibold text-text"
                 >
                   Tempo indicatif
                 </label>
-                <span className="font-mono-tabular text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+                <span className="font-mono-tabular text-xs font-semibold text-sky-press">
                   {tempoBpm} BPM
                 </span>
               </div>
@@ -276,16 +276,16 @@ export function SessionConfigPanel({
                 step={2}
                 value={tempoBpm}
                 onChange={(e) => setTempoBpm(Number(e.target.value))}
-                className="mt-3 w-full accent-indigo-600 dark:accent-indigo-400"
+                className="mt-3 w-full accent-sky dark:accent-indigo-400"
               />
-              <div className="mt-1 flex justify-between text-[11px] text-stone-400 dark:text-slate-500">
+              <div className="mt-1 flex justify-between text-[11px] text-muted">
                 <span>45 BPM</span>
                 <span>130 BPM</span>
               </div>
             </div>
 
             <div>
-              <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+              <span className="block text-sm font-semibold text-text">
                 Nombre d’accords
               </span>
               <div className="mt-2.5 grid grid-cols-4 gap-1.5">
@@ -294,11 +294,11 @@ export function SessionConfigPanel({
                     key={count}
                     type="button"
                     onClick={() => setChordCount(count)}
-                    className={`rounded-lg border py-2 font-mono-tabular text-xs font-medium transition-colors ${
-                      chordCount === count
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200'
-                        : 'border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
+                    className={`rounded-lg border py-2 font-mono-tabular text-xs font-semibold transition-colors ${
+ chordCount === count
+ ? 'border-sky bg-sky/10 text-sky-press '
+ : 'border-line text-muted hover:bg-mist '
+ }`}
                   >
                     {count}
                   </button>
@@ -307,7 +307,7 @@ export function SessionConfigPanel({
             </div>
 
             <div>
-              <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+              <span className="block text-sm font-semibold text-text">
                 Durée maximale
               </span>
               <div className="mt-2.5 grid grid-cols-4 gap-1.5">
@@ -321,11 +321,11 @@ export function SessionConfigPanel({
                     key={opt.value}
                     type="button"
                     onClick={() => setDurationMinutes(opt.value)}
-                    className={`rounded-lg border py-2 font-mono-tabular text-xs font-medium transition-colors ${
-                      durationMinutes === opt.value
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200'
-                        : 'border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
+                    className={`rounded-lg border py-2 font-mono-tabular text-xs font-semibold transition-colors ${
+ durationMinutes === opt.value
+ ? 'border-sky bg-sky/10 text-sky-press '
+ : 'border-line text-muted hover:bg-mist '
+ }`}
                   >
                     {opt.label}
                   </button>
@@ -338,7 +338,7 @@ export function SessionConfigPanel({
             <button
               type="button"
               onClick={handleStartCustomSession}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+              className="mb-btn mb-btn-green"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
               <span>Lancer la session</span>
@@ -348,7 +348,7 @@ export function SessionConfigPanel({
       ) : (
         <div className="mt-6 space-y-6">
           <div>
-            <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+            <span className="block text-sm font-semibold text-text">
               Chansons guidées (progression étape par étape)
             </span>
             <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
@@ -368,20 +368,20 @@ export function SessionConfigPanel({
                       setProgressionStep(unlocked);
                     }}
                     className={`flex flex-col items-start rounded-xl border px-4 py-3 text-left transition-colors ${
-                      isSelected
-                        ? 'border-indigo-500 bg-indigo-50/80 dark:border-indigo-400/70 dark:bg-indigo-500/15'
-                        : 'border-stone-200 hover:border-stone-300 dark:border-slate-800 dark:hover:border-slate-700'
-                    }`}
+ isSelected
+ ? 'border-sky bg-sky/10 '
+ : 'border-line hover:border-line '
+ }`}
                   >
                     <div className="flex w-full items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-stone-900 dark:text-slate-100">
+                      <span className="text-sm font-semibold text-text">
                         {song.title}
                       </span>
-                      <span className="text-[11px] text-stone-500 dark:text-slate-400">
+                      <span className="text-[11px] text-muted">
                         {getSongStepShortLabel(song, unlocked)}
                       </span>
                     </div>
-                    <span className="mt-0.5 font-mono text-xs text-indigo-600 dark:text-indigo-300">
+                    <span className="mt-0.5 tabular-nums text-xs text-sky-press">
                       {text}
                     </span>
                   </button>
@@ -391,17 +391,17 @@ export function SessionConfigPanel({
           </div>
 
           <div>
-            <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+            <span className="block text-sm font-semibold text-text">
               {selectedSong
                 ? 'Étape débloquée sur cette chanson'
                 : 'Étape de jeu sur cette suite libre'}
             </span>
             <div
               className={`mt-2.5 grid gap-2 ${
-                visibleProgressionSteps.length === 3
-                  ? 'sm:grid-cols-3'
-                  : 'sm:grid-cols-4'
-              }`}
+ visibleProgressionSteps.length === 3
+ ? 'sm:grid-cols-3'
+ : 'sm:grid-cols-4'
+ }`}
             >
               {visibleProgressionSteps.map((stepId) => {
                 const isUnlocked = selectedSong
@@ -421,18 +421,18 @@ export function SessionConfigPanel({
                     title={
                       isUnlocked
                         ? VOICING_STEPS[stepId].descriptionFr
-                        : 'Validez l’étape précédente à 100 XP pour débloquer ce palier'
+                        : 'Réussissez une séance complète du palier précédent pour débloquer celui-ci'
                     }
                     onClick={() => {
                       if (isUnlocked) setProgressionStep(stepId);
                     }}
                     className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                      !isUnlocked
-                        ? 'cursor-not-allowed border-stone-200/70 bg-stone-100/70 text-stone-400 opacity-60 dark:border-slate-800/70 dark:bg-slate-900/30 dark:text-slate-500'
-                        : active
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-950 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-100'
-                          : 'border-stone-200 bg-stone-50/50 text-stone-600 hover:border-stone-300 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400 dark:hover:border-slate-700'
-                    }`}
+ !isUnlocked
+ ? 'cursor-not-allowed border-line bg-mist text-muted opacity-60 '
+ : active
+ ? 'border-sky bg-sky/10 text-text '
+ : 'border-line bg-mist text-muted hover:border-line '
+ }`}
                   >
                     <span className="text-xs font-semibold">{label}</span>
                     {!isUnlocked && (
@@ -442,7 +442,7 @@ export function SessionConfigPanel({
                 );
               })}
             </div>
-            <p className="mt-1.5 text-xs text-stone-500 dark:text-slate-400">
+            <p className="mt-1.5 text-xs text-muted">
               {VOICING_STEPS[progressionStep].descriptionFr}
             </p>
           </div>
@@ -450,7 +450,7 @@ export function SessionConfigPanel({
           <div>
             <label
               htmlFor="progression-input"
-              className="block text-sm font-medium text-stone-800 dark:text-slate-200"
+              className="block text-sm font-semibold text-text"
             >
               Suite d’accords (ou saisissez une suite libre)
             </label>
@@ -464,19 +464,19 @@ export function SessionConfigPanel({
                 setProgressionLabel('Suite personnalisée');
               }}
               placeholder="Ex. Dm7 – G7 – Cmaj7 ou Rém7 – Sol7 – Do7M"
-              className="mt-2 w-full rounded-xl border border-stone-300 bg-stone-50/50 px-4 py-2.5 font-mono text-sm text-stone-900 placeholder:text-stone-400 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:placeholder:text-slate-500"
+              className="mt-2 w-full rounded-xl border-2 border-line bg-mist px-4 py-2.5 tabular-nums text-sm text-text placeholder:text-muted focus:border-sky focus:outline-none dark:placeholder:text-slate-500"
             />
             <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-stone-500 dark:text-slate-400">Aperçu :</span>
+              <span className="text-muted">Aperçu :</span>
               {parsedProgression.chords.length > 0 ? (
                 parsedProgression.chords.map((chord, idx) => (
                   <span
                     key={`${chord.id}-${idx}`}
-                    className="font-mono font-medium text-stone-800 dark:text-slate-200"
+                    className="tabular-nums font-semibold text-text"
                   >
                     {formatChordName(chord, notation)}
                     {idx < parsedProgression.chords.length - 1 && (
-                      <span className="ml-2 text-stone-400 dark:text-slate-600">→</span>
+                      <span className="ml-2 text-muted">→</span>
                     )}
                   </span>
                 ))
@@ -498,11 +498,11 @@ export function SessionConfigPanel({
               <div className="flex items-center justify-between text-sm">
                 <label
                   htmlFor="prog-tempo"
-                  className="font-medium text-stone-800 dark:text-slate-200"
+                  className="font-semibold text-text"
                 >
                   Tempo
                 </label>
-                <span className="font-mono-tabular text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+                <span className="font-mono-tabular text-xs font-semibold text-sky-press">
                   {progressionTempo} BPM
                 </span>
               </div>
@@ -514,12 +514,12 @@ export function SessionConfigPanel({
                 step={2}
                 value={progressionTempo}
                 onChange={(e) => setProgressionTempo(Number(e.target.value))}
-                className="mt-3 w-full accent-indigo-600 dark:accent-indigo-400"
+                className="mt-3 w-full accent-sky dark:accent-indigo-400"
               />
             </div>
 
             <div>
-              <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+              <span className="block text-sm font-semibold text-text">
                 Temps par accord
               </span>
               <div className="mt-2.5 grid grid-cols-3 gap-1.5">
@@ -528,11 +528,11 @@ export function SessionConfigPanel({
                     key={beats}
                     type="button"
                     onClick={() => setBeatsPerChord(beats)}
-                    className={`rounded-lg border py-2 font-mono-tabular text-xs font-medium transition-colors ${
-                      beatsPerChord === beats
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200'
-                        : 'border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
+                    className={`rounded-lg border py-2 font-mono-tabular text-xs font-semibold transition-colors ${
+ beatsPerChord === beats
+ ? 'border-sky bg-sky/10 text-sky-press '
+ : 'border-line text-muted hover:bg-mist '
+ }`}
                   >
                     {beats} tps
                   </button>
@@ -541,7 +541,7 @@ export function SessionConfigPanel({
             </div>
 
             <div>
-              <span className="block text-sm font-medium text-stone-800 dark:text-slate-200">
+              <span className="block text-sm font-semibold text-text">
                 Cycles en boucle
               </span>
               <div className="mt-2.5 grid grid-cols-3 gap-1.5">
@@ -554,11 +554,11 @@ export function SessionConfigPanel({
                     key={opt.value}
                     type="button"
                     onClick={() => setLoopCount(opt.value)}
-                    className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
-                      loopCount === opt.value
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200'
-                        : 'border-stone-200 text-stone-600 hover:bg-stone-50 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
+                    className={`rounded-lg border py-2 text-xs font-semibold transition-colors ${
+ loopCount === opt.value
+ ? 'border-sky bg-sky/10 text-sky-press '
+ : 'border-line text-muted hover:bg-mist '
+ }`}
                   >
                     {opt.label}
                   </button>
@@ -572,7 +572,7 @@ export function SessionConfigPanel({
               type="button"
               disabled={parsedProgression.chords.length === 0}
               onClick={handleStartProgression}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+              className="mb-btn mb-btn-green"
             >
               <Repeat className="h-4 w-4" aria-hidden="true" />
               <span>Lancer la progression</span>

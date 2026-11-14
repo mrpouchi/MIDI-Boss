@@ -12,7 +12,7 @@ import {
 const STORAGE_KEY = 'chord-practice:v1';
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'dark',
+  theme: 'light',
   notation: 'intl',
   audioEnabled: true,
   audioVolume: 0.65,
@@ -207,19 +207,12 @@ export function createDemoData(settings: AppSettings = DEFAULT_SETTINGS): Stored
       songId: 'song-pop-do',
       unlockedStep: 'root-5th',
       completedSteps: ['root'],
-      stepXp: {
-        root: 100,
-        'root-5th': 40,
-      },
       lastPracticedAt: daysAgoIso(1),
     },
     'song-lune-mineure': {
       songId: 'song-lune-mineure',
       unlockedStep: 'root',
       completedSteps: [],
-      stepXp: {
-        root: 40,
-      },
       lastPracticedAt: daysAgoIso(2),
     },
   };

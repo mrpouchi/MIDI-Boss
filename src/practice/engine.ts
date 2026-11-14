@@ -6,6 +6,7 @@ import {
   createChord,
   parseChordId,
 } from '../music/chords';
+import { getSongById, isSongStepValidated } from './curriculum';
 import {
   AttemptRecord,
   PracticeMode,
@@ -117,9 +118,15 @@ export function buildSessionSummary(params: {
   durationSeconds: number;
   tempoBpm: number;
   families: ChordFamily[];
+  completedFully: boolean;
 }): SessionSummary {
-  const { mode, label, step, songId, attempts, durationSeconds, tempoBpm, families } =
+  const { mode, label, step, songId, attempts, durationSeconds, tempoBpm, families, completedFully } =
     params;
+  const song = getSongById(songId);
+  const songStepValidated =
+    song !== undefined && step !== undefined
+      ? isSongStepValidated({ song, step, attempts, completedFully })
+      : false;
 
   const totalChords = attempts.length;
   const correctCount = attempts.filter((a) => a.outcome === 'correct').length;
@@ -164,5 +171,7 @@ export function buildSessionSummary(params: {
     families,
     chordsToReview: Array.from(reviewMap.values()),
     attempts,
+    completedFully,
+    songStepValidated,
   };
 }

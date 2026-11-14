@@ -7,6 +7,9 @@ export type MidiConnectionStatus =
 
 export type InputSourceKind = 'midi' | 'virtual' | 'keyboard' | 'microphone';
 
+/** A note event on the `performance.now()` clock (Web MIDI timestamps use it too). */
+export type NoteEventListener = (note: number, on: boolean, timeMs: number) => void;
+
 export interface MidiDeviceInfo {
   id: string;
   name: string;

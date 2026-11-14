@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Award,
   Clock,
-  Layers,
   TrendingUp,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -11,18 +10,16 @@ import {
   ALL_CHORD_FAMILIES,
   CHORD_FAMILIES,
   ChordFamily,
-  VOICING_STEPS,
   parseChordId,
 } from '../../music/chords';
-import {
-  GUIDED_SONGS,
-  getSongUnlockedStep,
-  getStepProgressPercent,
-} from '../../practice/curriculum';
 import {
   buildPracticeRecommendations,
   classifyChordMastery,
 } from '../../practice/recommendations';
+import { assessSkills } from '../../practice/mastery';
+import { SkillTreePanel } from '../components/SkillTreePanel';
+import { SONG_PATH } from '../../content/songPath';
+import { buildSongPath } from '../../practice/songProgress';
 import { getSpacedOverview } from '../../practice/spacedRepetition';
 import { PracticeConfig, SessionConfig } from '../../practice/types';
 import { SessionRecord, StoredData } from '../../storage/types';
@@ -47,7 +44,7 @@ export function ProgressScreen({
   storedData,
   onStartPractice,
 }: ProgressScreenProps) {
-  const { settings, chordStats, spacedCards, songProgress, sessions, isDemoData } =
+  const { settings, chordStats, spacedCards, sessions, isDemoData } =
     storedData;
   const [familyFilter, setFamilyFilter] = useState<'all' | ChordFamily>('all');
 
@@ -58,6 +55,8 @@ export function ProgressScreen({
     settings.notation,
     spacedCards,
   );
+  const songViews = buildSongPath(SONG_PATH, storedData.playAlongRuns ?? []);
+  const skillAssessments = assessSkills(spacedCards, chordStats, storedData.playAlongRuns ?? []);
 
   const allItems = [
     ...mastery.needsWork,
@@ -114,7 +113,7 @@ export function ProgressScreen({
               durationMinutes: 5,
             })
           }
-          className="duo-button duo-button-primary duo-focus mt-6"
+          className="mb-btn mb-btn-green mt-6"
         >
           <span>Commencer à l’étape 1 (Fondamentales)</span>
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -127,32 +126,11 @@ export function ProgressScreen({
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="duo-title text-2xl sm:text-3xl">
-            Progression personnelle
-          </h1>
-          <p className="mt-1 text-sm text-stone-500 dark:text-slate-400">
-            {sessions.length} sessions enregistrées
-            <span aria-hidden="true" className="mx-2">
-              ·
-            </span>
-            Précision moyenne :{' '}
-            <span className="font-mono-tabular font-semibold text-stone-800 dark:text-slate-200">
-              {mastery.overallAccuracy}%
-            </span>
-            <span aria-hidden="true" className="mx-2">
-              ·
-            </span>
-            <span className="font-mono-tabular">
-              {spaced.dueCount} révision{spaced.dueCount > 1 ? 's' : ''} due{spaced.dueCount > 1 ? 's' : ''}
-            </span>
-            {isDemoData && (
-              <>
-                <span aria-hidden="true" className="mx-2">
-                  ·
-                </span>
-                <span>Données de démonstration</span>
-              </>
-            )}
+          <h1 className="duo-title text-3xl sm:text-4xl">Compétences</h1>
+          <p className="mt-1 font-semibold text-muted">
+            {mastery.overallAccuracy} % de réussite sur {sessions.length} séance{sessions.length > 1 ? 's' : ''}
+            {spaced.dueCount > 0 ? `, ${spaced.dueCount} accord${spaced.dueCount > 1 ? 's' : ''} à revoir` : ''}.
+            {isDemoData ? ' Données de démonstration.' : ''}
           </p>
         </div>
 
@@ -165,13 +143,15 @@ export function ProgressScreen({
                 'Accords à travailler',
               )
             }
-            className="duo-button duo-button-primary duo-focus"
+            className="mb-btn mb-btn-green"
           >
             <span>Travailler les accords fragiles</span>
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
+
+      <SkillTreePanel assessments={skillAssessments} />
 
       {/* Three Mastery Cards */}
       <div className="grid gap-5 md:grid-cols-3">
@@ -181,17 +161,17 @@ export function ProgressScreen({
               <Award className="h-4 w-4" aria-hidden="true" />
               <h2 className="font-display text-sm font-semibold">Maîtrisés</h2>
             </div>
-            <span className="font-mono-tabular text-xs text-stone-500 dark:text-slate-400">
+            <span className="font-mono-tabular text-xs text-muted">
               {mastery.mastered.length} accords
             </span>
           </div>
-          <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-muted">
             85 % et plus de réussite régulière
           </p>
 
           <div className="mt-4 space-y-2">
             {mastery.mastered.length === 0 ? (
-              <p className="text-xs text-stone-400 dark:text-slate-500">
+              <p className="text-xs text-muted">
                 Aucun accord encore classé ici.
               </p>
             ) : (
@@ -200,10 +180,10 @@ export function ProgressScreen({
                   key={item.chordId}
                   className="flex items-center justify-between text-sm"
                 >
-                  <span className="font-medium text-stone-800 dark:text-slate-200">
+                  <span className="font-semibold text-text">
                     {item.label}
                   </span>
-                  <span className="font-mono-tabular text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="font-mono-tabular text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     {item.accuracy}%
                   </span>
                 </div>
@@ -212,23 +192,23 @@ export function ProgressScreen({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="rounded-2xl border-2 border-line bg-surface p-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-300">
+            <div className="flex items-center gap-2 text-sky-press">
               <TrendingUp className="h-4 w-4" aria-hidden="true" />
               <h2 className="font-display text-sm font-semibold">À consolider</h2>
             </div>
-            <span className="font-mono-tabular text-xs text-stone-500 dark:text-slate-400">
+            <span className="font-mono-tabular text-xs text-muted">
               {mastery.consolidating.length} accords
             </span>
           </div>
-          <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-muted">
             Entre 60 % et 84 % de réussite
           </p>
 
           <div className="mt-4 space-y-2">
             {mastery.consolidating.length === 0 ? (
-              <p className="text-xs text-stone-400 dark:text-slate-500">
+              <p className="text-xs text-muted">
                 Aucun accord dans cette zone.
               </p>
             ) : (
@@ -237,7 +217,7 @@ export function ProgressScreen({
                   key={item.chordId}
                   className="flex items-center justify-between text-sm"
                 >
-                  <span className="font-medium text-stone-800 dark:text-slate-200">
+                  <span className="font-semibold text-text">
                     {item.label}
                     {item.isolatedVsProgressionGap && (
                       <span className="ml-2 text-[11px] font-normal text-amber-600 dark:text-amber-400">
@@ -245,7 +225,7 @@ export function ProgressScreen({
                       </span>
                     )}
                   </span>
-                  <span className="font-mono-tabular text-xs font-medium text-indigo-600 dark:text-indigo-300">
+                  <span className="font-mono-tabular text-xs font-semibold text-sky-press">
                     {item.accuracy}%
                   </span>
                 </div>
@@ -254,23 +234,23 @@ export function ProgressScreen({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="rounded-2xl border-2 border-line bg-surface p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
               <AlertTriangle className="h-4 w-4" aria-hidden="true" />
               <h2 className="font-display text-sm font-semibold">À travailler</h2>
             </div>
-            <span className="font-mono-tabular text-xs text-stone-500 dark:text-slate-400">
+            <span className="font-mono-tabular text-xs text-muted">
               {mastery.needsWork.length} accords
             </span>
           </div>
-          <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-muted">
             Moins de 60 % de réussite
           </p>
 
           <div className="mt-4 space-y-2">
             {mastery.needsWork.length === 0 ? (
-              <p className="text-xs text-stone-400 dark:text-slate-500">
+              <p className="text-xs text-muted">
                 Aucun accord critique détecté.
               </p>
             ) : (
@@ -279,10 +259,10 @@ export function ProgressScreen({
                   key={item.chordId}
                   className="flex items-center justify-between text-sm"
                 >
-                  <span className="font-medium text-stone-800 dark:text-slate-200">
+                  <span className="font-semibold text-text">
                     {item.label}
                   </span>
-                  <span className="font-mono-tabular text-xs font-medium text-rose-600 dark:text-rose-400">
+                  <span className="font-mono-tabular text-xs font-semibold text-rose-600 dark:text-rose-400">
                     {item.accuracy}%
                   </span>
                 </div>
@@ -292,57 +272,60 @@ export function ProgressScreen({
         </section>
       </div>
 
-      {/* Guided Songs Progress */}
-      <section className="rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
-            <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
-              Paliers des chansons guidées
-            </h2>
-          </div>
-          <span className="text-xs text-stone-500 dark:text-slate-400">
-            Fondamentale → Quinte → Triade → Extensions
-          </span>
+      {/* Song path progress: objectives validated with the band */}
+      <section className="mb-panel p-6" aria-labelledby="songs-progress-title">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="songs-progress-title" className="duo-title text-2xl">Vos chansons</h2>
+          <p className="text-sm font-bold text-muted">
+            {songViews.reduce((n, v) => n + v.doneCount, 0)} objectifs validés sur{' '}
+            {songViews.reduce((n, v) => n + v.song.objectives.length, 0)}
+          </p>
         </div>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {GUIDED_SONGS.map((song) => {
-            const currentStep = getSongUnlockedStep(song, songProgress);
-            const pct = getStepProgressPercent(song, songProgress);
-            return (
-              <div
-                key={song.id}
-                className="rounded-xl border border-stone-200/80 bg-stone-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/40"
-              >
-                <div className="flex items-center justify-between text-sm font-semibold text-stone-900 dark:text-slate-100">
-                  <span>{song.title}</span>
-                  <span className="font-mono-tabular text-xs text-indigo-600 dark:text-indigo-300">
-                    {pct}%
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-stone-500 dark:text-slate-400">
-                  Palier actuel : {VOICING_STEPS[currentStep].shortLabelFr}
-                </p>
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {songViews.map((v) => (
+            <li
+              key={v.song.id}
+              className={`rounded-2xl border-2 border-line p-4 ${v.unlocked ? 'bg-surface' : 'bg-mist opacity-70'}`}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="truncate font-bold">{v.song.title.replace(/, The$/, '')}</p>
+                <span className="shrink-0 text-sm font-extrabold text-muted">
+                  {v.doneCount}/{v.song.objectives.length}
+                </span>
               </div>
-            );
-          })}
-        </div>
+              <div className="mt-2 flex gap-1" aria-hidden="true">
+                {v.objectives.map((o) => (
+                  <span
+                    key={o.objective.id}
+                    className={`h-2 flex-1 rounded-full ${o.state === 'done' ? 'bg-green' : o.state === 'current' ? 'bg-brass' : 'bg-line'}`}
+                  />
+                ))}
+              </div>
+              <p className="mt-2 text-sm font-semibold text-muted">
+                {!v.unlocked
+                  ? 'Pas encore ouverte'
+                  : v.doneCount === v.song.objectives.length
+                    ? 'Maîtrisée au tempo original'
+                    : `Prochain objectif : ${v.objectives.find((o) => o.state !== 'done')?.objective.label ?? ''}`}
+              </p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* Lightweight Chart + Recommendations */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-2 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="rounded-2xl border-2 border-line bg-surface p-6 lg:col-span-2">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
+              <h2 className="font-display text-base font-semibold text-text">
                 Évolution de la précision
               </h2>
-              <p className="mt-0.5 text-xs text-stone-500 dark:text-slate-400">
+              <p className="mt-0.5 text-xs text-muted">
                 Taux de réussite sur vos dernières séances
               </p>
             </div>
-            <span className="font-mono-tabular text-xs text-stone-400 dark:text-slate-500">
+            <span className="font-mono-tabular text-xs text-muted">
               {chartSessions.length} dernières sessions
             </span>
           </div>
@@ -354,15 +337,15 @@ export function ProgressScreen({
           )}
         </section>
 
-        <section className="rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
-          <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
+        <section className="rounded-2xl border-2 border-line bg-surface p-6">
+          <h2 className="font-display text-base font-semibold text-text">
             Recommandations
           </h2>
-          <ul className="mt-4 space-y-3.5 text-sm leading-relaxed text-stone-600 dark:text-slate-300">
+          <ul className="mt-4 space-y-3.5 text-sm leading-relaxed text-muted">
             {recommendations.map((rec, idx) => (
               <li
                 key={idx}
-                className="border-b border-stone-100 pb-3 last:border-b-0 last:pb-0 dark:border-slate-800/80"
+                className="border-b border-line pb-3 last:border-b-0 last:pb-0"
               >
                 {rec}
               </li>
@@ -373,9 +356,9 @@ export function ProgressScreen({
 
       {/* Chord Breakdown + Session History */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="rounded-2xl border-2 border-line bg-surface p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
+            <h2 className="font-display text-base font-semibold text-text">
               Taux de réussite par accord
             </h2>
             <select
@@ -384,7 +367,7 @@ export function ProgressScreen({
               onChange={(e) =>
                 setFamilyFilter(e.target.value as 'all' | ChordFamily)
               }
-              className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs text-stone-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="rounded-lg border-2 border-line bg-mist px-2.5 py-1.5 text-xs text-text"
             >
               <option value="all">Toutes les familles</option>
               {ALL_CHORD_FAMILIES.map((f) => (
@@ -395,9 +378,9 @@ export function ProgressScreen({
             </select>
           </div>
 
-          <div className="mt-4 divide-y divide-stone-100 dark:divide-slate-800/80">
+          <div className="mt-4 divide-y divide-line">
             {allItems.length === 0 ? (
-              <p className="py-6 text-center text-xs text-stone-400 dark:text-slate-500">
+              <p className="py-6 text-center text-xs text-muted">
                 Aucun accord pratiqué dans cette famille.
               </p>
             ) : (
@@ -407,31 +390,31 @@ export function ProgressScreen({
                   className="flex items-center justify-between gap-4 py-2.5 text-sm"
                 >
                   <div className="flex items-baseline gap-2.5">
-                    <span className="font-display font-semibold text-stone-900 dark:text-slate-100">
+                    <span className="font-display font-semibold text-text">
                       {item.label}
                     </span>
-                    <span className="text-xs text-stone-400 dark:text-slate-500">
+                    <span className="text-xs text-muted">
                       {CHORD_FAMILIES[item.family].labelFr}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <span className="font-mono-tabular text-xs text-stone-400 dark:text-slate-500">
+                    <span className="font-mono-tabular text-xs text-muted">
                       {item.correct}/{item.attempts}
                     </span>
-                    <div className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-stone-100 sm:block dark:bg-slate-800">
+                    <div className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-mist sm:block">
                       <div
                         className={`h-full rounded-full ${
-                          item.tier === 'mastered'
-                            ? 'bg-emerald-500'
-                            : item.tier === 'consolidating'
-                              ? 'bg-indigo-500'
-                              : 'bg-rose-500'
-                        }`}
+ item.tier === 'mastered'
+ ? 'bg-emerald-500'
+ : item.tier === 'consolidating'
+ ? 'bg-indigo-500'
+ : 'bg-rose-500'
+ }`}
                         style={{ width: `${item.accuracy}%` }}
                       />
                     </div>
-                    <span className="w-10 text-right font-mono-tabular text-xs font-semibold text-stone-800 dark:text-slate-200">
+                    <span className="w-10 text-right font-mono-tabular text-xs font-semibold text-text">
                       {item.accuracy}%
                     </span>
                   </div>
@@ -441,25 +424,25 @@ export function ProgressScreen({
           </div>
         </section>
 
-        <section className="rounded-2xl border border-stone-200 bg-white p-6 dark:border-slate-800 dark:bg-[#151c2f]">
+        <section className="rounded-2xl border-2 border-line bg-surface p-6">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-base font-semibold text-stone-900 dark:text-slate-100">
+            <h2 className="font-display text-base font-semibold text-text">
               Historique récent
             </h2>
-            <Clock className="h-4 w-4 text-stone-400 dark:text-slate-500" aria-hidden="true" />
+            <Clock className="h-4 w-4 text-muted" aria-hidden="true" />
           </div>
 
-          <div className="mt-4 divide-y divide-stone-100 dark:divide-slate-800/80">
+          <div className="mt-4 divide-y divide-line">
             {sessions.slice(0, 8).map((sess) => (
               <div
                 key={sess.id}
                 className="flex items-center justify-between gap-4 py-3 text-sm"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-stone-900 dark:text-slate-100">
+                  <p className="truncate font-semibold text-text">
                     {sess.label}
                   </p>
-                  <p className="mt-0.5 text-xs text-stone-500 dark:text-slate-400">
+                  <p className="mt-0.5 text-xs text-muted">
                     {formatShortDate(sess.date)}
                     <span aria-hidden="true" className="mx-1.5">
                       ·
@@ -477,12 +460,12 @@ export function ProgressScreen({
                 <div className="shrink-0 text-right">
                   <span
                     className={`font-mono-tabular text-sm font-semibold ${
-                      sess.accuracy >= 85
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : sess.accuracy >= 65
-                          ? 'text-indigo-600 dark:text-indigo-300'
-                          : 'text-rose-600 dark:text-rose-400'
-                    }`}
+ sess.accuracy >= 85
+ ? 'text-emerald-600 dark:text-emerald-400'
+ : sess.accuracy >= 65
+ ? 'text-sky-press '
+ : 'text-rose-600 dark:text-rose-400'
+ }`}
                   >
                     {sess.accuracy}%
                   </span>
@@ -541,12 +524,12 @@ function AccuracySvgChart({ sessions }: { sessions: SessionRecord[] }) {
                 y2={y}
                 stroke="currentColor"
                 strokeDasharray="3 4"
-                className="text-stone-200 dark:text-slate-800"
+                className="text-stone-200"
               />
               <text
                 x={0}
                 y={y + 3}
-                className="fill-stone-400 font-mono text-[9px] dark:fill-slate-500"
+                className="fill-stone-400 tabular-nums text-[9px]"
               >
                 {val}%
               </text>
@@ -557,7 +540,7 @@ function AccuracySvgChart({ sessions }: { sessions: SessionRecord[] }) {
         {areaPath && (
           <path
             d={areaPath}
-            className="fill-indigo-500/10 dark:fill-indigo-400/10"
+            className="fill-indigo-500/10"
           />
         )}
 
@@ -569,7 +552,7 @@ function AccuracySvgChart({ sessions }: { sessions: SessionRecord[] }) {
             strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="text-indigo-600 dark:text-indigo-400"
+            className="text-sky-press"
           />
         )}
 
@@ -589,7 +572,7 @@ function AccuracySvgChart({ sessions }: { sessions: SessionRecord[] }) {
               x={p.x}
               y={height - 2}
               textAnchor="middle"
-              className="fill-stone-400 font-mono text-[9px] dark:fill-slate-500"
+              className="fill-stone-400 tabular-nums text-[9px]"
             >
               {formatShortDate(p.session.date)}
             </text>

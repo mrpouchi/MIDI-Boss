@@ -1,6 +1,5 @@
 import {
   NotationSystem,
-  VOICING_STEPS,
   VoicingStep,
   formatChordName,
   getChordNoteNames,
@@ -223,12 +222,17 @@ export function generateDuolingoMicroLesson(
   }
 
   const finalItems = items.slice(0, 8);
-  const stepMeta = VOICING_STEPS[activeStep];
 
+  const stepGoal: Record<VoicingStep, string> = {
+    root: 'en jouant les fondamentales',
+    'root-5th': 'en ajoutant les quintes',
+    triad: 'avec les accords à trois notes',
+    full: 'avec les septièmes',
+  };
   const goalDescription =
     spacedOverview.dueCount > 0
-      ? `Réviser ${Math.min(3, spacedOverview.dueCount)} accords à consolider et pratiquer « ${activeSong.title} » (${stepMeta.shortLabelFr}).`
-      : `Pratiquer « ${activeSong.title} » à l’étape ${stepMeta.order}/4 (${stepMeta.shortLabelFr}).`;
+      ? `Revoir ${Math.min(3, spacedOverview.dueCount)} accords fragiles, puis jouer « ${activeSong.title} » ${stepGoal[activeStep]}.`
+      : `Jouer « ${activeSong.title} » ${stepGoal[activeStep]}.`;
 
   return {
     mode: 'lesson',

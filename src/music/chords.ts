@@ -1,4 +1,14 @@
-export type ChordFamily = 'maj' | 'min' | 'sus2' | 'sus4' | '7' | 'maj7' | 'm7';
+export type ChordFamily =
+  | 'maj'
+  | 'min'
+  | 'dim'
+  | 'sus2'
+  | 'sus4'
+  | '7'
+  | 'maj7'
+  | 'm7'
+  | 'm7b5'
+  | 'dim7';
 
 export type NotationSystem = 'intl' | 'fr';
 
@@ -87,6 +97,14 @@ export const CHORD_FAMILIES: Record<ChordFamily, ChordFamilyMeta> = {
     intervals: [0, 3, 7],
     intervalLabels: ['1', '♭3', '5'],
   },
+  dim: {
+    id: 'dim',
+    labelFr: 'Diminué',
+    intlSuffix: 'dim',
+    frSuffix: 'dim',
+    intervals: [0, 3, 6],
+    intervalLabels: ['1', '♭3', '♭5'],
+  },
   sus2: {
     id: 'sus2',
     labelFr: 'Sus2',
@@ -127,17 +145,41 @@ export const CHORD_FAMILIES: Record<ChordFamily, ChordFamilyMeta> = {
     intervals: [0, 3, 7, 10],
     intervalLabels: ['1', '♭3', '5', '♭7'],
   },
+  m7b5: {
+    id: 'm7b5',
+    labelFr: 'Demi-diminué (m7♭5)',
+    intlSuffix: 'm7♭5',
+    frSuffix: 'm7♭5',
+    intervals: [0, 3, 6, 10],
+    intervalLabels: ['1', '♭3', '♭5', '♭7'],
+  },
+  dim7: {
+    id: 'dim7',
+    labelFr: 'Diminué 7',
+    intlSuffix: 'dim7',
+    frSuffix: 'dim7',
+    intervals: [0, 3, 6, 9],
+    intervalLabels: ['1', '♭3', '♭5', '𝄫7'],
+  },
 };
 
 export const ALL_CHORD_FAMILIES: ChordFamily[] = [
   'maj',
   'min',
+  'dim',
   'sus2',
   'sus4',
   '7',
   'maj7',
   'm7',
+  'm7b5',
+  'dim7',
 ];
+
+/** The fifth of a chord may be perfect (7), diminished (6) or augmented (8). */
+function isFifth(interval: number): boolean {
+  return interval === 6 || interval === 7 || interval === 8;
+}
 
 const INTL_PITCH_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
 const FR_PITCH_NAMES = ['Do', 'Do#', 'Ré', 'Mib', 'Mi', 'Fa', 'Fa#', 'Sol', 'Lab', 'La', 'Sib', 'Si'] as const;
@@ -193,7 +235,7 @@ export function getTargetIntervalsForStep(
     return [0];
   }
   if (step === 'root-5th') {
-    return meta.intervals.filter((interval) => interval === 0 || interval === 7);
+    return meta.intervals.filter((interval) => interval === 0 || isFifth(interval));
   }
   if (step === 'triad') {
     return meta.intervals.filter((interval) => interval < 10);
@@ -215,7 +257,9 @@ export function getStepIntervalLabels(
 ): string[] {
   const meta = CHORD_FAMILIES[chord.family];
   if (step === 'root') return ['1'];
-  if (step === 'root-5th') return ['1', '5'];
+  if (step === 'root-5th') {
+    return meta.intervalLabels.filter((_, idx) => meta.intervals[idx] === 0 || isFifth(meta.intervals[idx]));
+  }
   if (step === 'triad') {
     return meta.intervalLabels.filter((_, idx) => meta.intervals[idx] < 10);
   }
@@ -293,7 +337,17 @@ export function parseChordToken(rawToken: string): ChordDefinition | null {
   const suffix = rawSuffix.trim().toLowerCase();
   let family: ChordFamily | null = null;
 
-  if (suffix === '' || suffix === 'maj' || suffix === 'majeur') {
+  if (['m7b5', 'm7♭5', 'min7b5', '-7b5', 'ø', 'ø7', 'h', 'h7'].includes(suffix.replace(/♭/g, 'b'))) {
+    family = 'm7b5';
+  } else if (['dim7', 'o7', '°7'].includes(suffix)) {
+    family = 'dim7';
+  } else if (['dim', 'o', '°'].includes(suffix)) {
+    family = 'dim';
+  }
+
+  if (family) {
+    // already resolved above
+  } else if (suffix === '' || suffix === 'maj' || suffix === 'majeur') {
     family = 'maj';
   } else if (suffix === 'm' || suffix === 'min' || suffix === '-' || suffix === 'mineur') {
     family = 'min';

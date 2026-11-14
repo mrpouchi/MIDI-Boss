@@ -11,9 +11,8 @@ import {
   Plus,
   SkipForward,
   SlidersHorizontal,
-  Sparkles,
-  Usb,
   Volume2,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pianoSynth } from '../../audio/synth';
@@ -33,12 +32,8 @@ import {
 } from '../../music/chords';
 import { formatActiveNotes, validateChordInput } from '../../music/validation';
 import {
-  STEP_XP_TARGET,
-  getNextStepForSong,
   getSongById,
-  getSongStepLabel,
   getSongStepShortLabel,
-  getSongStepXp,
   isStepUnlockedForSong,
 } from '../../practice/curriculum';
 import {
@@ -57,18 +52,13 @@ import {
 import { AppSettings, SongProgress } from '../../storage/types';
 import { SessionConfigPanel } from '../components/SessionConfigPanel';
 import { SessionSummaryView } from '../components/SessionSummaryView';
+import { Mascot, MascotMood } from '../components/Mascot';
 import { VirtualKeyboard } from '../components/VirtualKeyboard';
 
 interface PlayScreenProps {
   settings: AppSettings;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   songProgress: Record<string, SongProgress>;
-  onRecordSongStepXp: (
-    songId: string,
-    step: VoicingStep,
-    newXp: number,
-    unlockedNextStep?: VoicingStep | null,
-  ) => void;
   midiState: MidiState;
   activeNotes: number[];
   virtualLatchNotes: number[];
@@ -108,7 +98,6 @@ export function PlayScreen({
   settings,
   onUpdateSettings,
   songProgress,
-  onRecordSongStepXp,
   midiState,
   activeNotes,
   virtualLatchNotes,
@@ -147,20 +136,6 @@ export function PlayScreen({
   const [requeueNotice, setRequeueNotice] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
 
-  // Visual XP bar state for current step / session
-  const [stepXp, setStepXp] = useState<number>(() => {
-    const cfg = initialConfig ?? DEFAULT_SESSION_CONFIG;
-    if (cfg.mode === 'progression' && cfg.songId) {
-      return getSongStepXp(cfg.songId, cfg.step, songProgress);
-    }
-    if (cfg.mode === 'lesson' && cfg.songId && cfg.targetStep) {
-      return getSongStepXp(cfg.songId, cfg.targetStep, songProgress);
-    }
-    return 0;
-  });
-  const [lastXpGain, setLastXpGain] = useState<number | null>(null);
-  const [justUnlockedStep, setJustUnlockedStep] = useState<VoicingStep | null>(null);
-
   // Per-chord & session timing
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [chordStartMs, setChordStartMs] = useState<number>(() => Date.now());
@@ -196,7 +171,6 @@ export function PlayScreen({
   const attemptsRef = useRef<AttemptRecord[]>([]);
   const elapsedRef = useRef(0);
   const requeuedCountRef = useRef<Record<string, number>>({});
-  const stepXpRef = useRef(stepXp);
 
   useEffect(() => {
     attemptsRef.current = attempts;
@@ -206,9 +180,14 @@ export function PlayScreen({
     elapsedRef.current = elapsedSeconds;
   }, [elapsedSeconds]);
 
-  useEffect(() => {
-    stepXpRef.current = stepXp;
-  }, [stepXp]);
+  // startWithConfig must stay referentially stable: it is called by an effect
+  // that should only fire when a *new* session is launched. Reading settings
+  // through a ref prevents a settings/progress update from silently restarting
+  // the running session — the root cause of the old "lesson cascade" bug.
+  const listenAndRepeatRef = useRef(settings.listenAndRepeatEnabled);
+  listenAndRepeatRef.current = settings.listenAndRepeatEnabled;
+  const clearLatchRef = useRef(onClearVirtualLatchNotes);
+  clearLatchRef.current = onClearVirtualLatchNotes;
 
   const startWithConfig = useCallback(
     (cfg: PracticeConfig) => {
@@ -217,24 +196,11 @@ export function PlayScreen({
       setConfigModeTab(cfg.mode);
       setQueue(builtQueue);
 
-      let initialStep: VoicingStep = 'full';
       if (cfg.mode === 'progression' || cfg.mode === 'session') {
-        initialStep = cfg.step;
         setProgressionStepOverride(cfg.step);
       } else if (cfg.targetStep) {
-        initialStep = cfg.targetStep;
         setProgressionStepOverride(cfg.targetStep);
       }
-
-      const startingXp =
-        (cfg.mode === 'progression' || cfg.mode === 'lesson') && cfg.songId
-          ? getSongStepXp(cfg.songId, initialStep, songProgress)
-          : 0;
-
-      setStepXp(startingXp);
-      stepXpRef.current = startingXp;
-      setLastXpGain(null);
-      setJustUnlockedStep(null);
 
       setCurrentIndex(0);
       resolvedChallengeRef.current = null;
@@ -255,17 +221,18 @@ export function PlayScreen({
       setCurrentBeat(0);
       setValidatedInCurrentBar(false);
       setShowExpectedHelper(Boolean(builtQueue[0]?.isNewConcept));
-      setImitationState(settings.listenAndRepeatEnabled ? 'listen' : 'play');
+      setImitationState(listenAndRepeatRef.current ? 'listen' : 'play');
       setAwaitingRelease(false);
       setLessonReadyToAdvance(false);
       isTransitioningRef.current = false;
-      onClearVirtualLatchNotes();
+      clearLatchRef.current();
       setPhase('active');
     },
-    [onClearVirtualLatchNotes, settings.listenAndRepeatEnabled, songProgress],
+    [],
   );
 
-  // Sync when launched from TodayScreen or ProgressScreen
+  // Sync when launched from TodayScreen or ProgressScreen. Fires only when the
+  // parent hands over a different config object — never on a mere re-render.
   useEffect(() => {
     if (startInConfigMode) {
       setPhase('configuring');
@@ -329,7 +296,7 @@ export function PlayScreen({
   }, [activeStep, currentChord, currentIndex, phase, settings.listenAndRepeatEnabled]);
 
   const finishSession = useCallback(
-    (finalAttempts?: AttemptRecord[]) => {
+    (finalAttempts?: AttemptRecord[], endedEarly = false) => {
       const list = finalAttempts ?? attemptsRef.current;
       const built = buildSessionSummary({
         mode: activeConfig.mode,
@@ -351,6 +318,7 @@ export function PlayScreen({
           activeConfig.mode === 'session'
             ? activeConfig.families
             : Array.from(new Set(queue.map((q) => q.chord.family))),
+        completedFully: !endedEarly,
       });
       setSummary(built);
       setPhase('summary');
@@ -473,59 +441,6 @@ export function PlayScreen({
     return validateChordInput(activeNotes, currentChord, activeStep);
   }, [activeNotes, activeStep, currentChord]);
 
-  const awardStepXp = useCallback(
-    (clean: boolean) => {
-      const perChordGain =
-        activeConfig.mode === 'progression'
-          ? clean
-            ? 20
-            : 10
-          : Math.max(10, Math.round(STEP_XP_TARGET / Math.max(1, queue.length)));
-      const gained = clean ? perChordGain : Math.max(5, Math.round(perChordGain / 2));
-
-      const nextXp = Math.min(STEP_XP_TARGET, stepXpRef.current + gained);
-      stepXpRef.current = nextXp;
-      setStepXp(nextXp);
-      setLastXpGain(gained);
-
-      window.setTimeout(() => {
-        setLastXpGain(null);
-      }, 900);
-
-      if (activeSong && activeConfig.mode === 'progression') {
-        const nextStep =
-          nextXp >= STEP_XP_TARGET
-            ? getNextStepForSong(activeSong, activeStep, songProgress)
-            : null;
-        onRecordSongStepXp(activeSong.id, activeStep, nextXp, nextStep);
-        if (nextXp >= STEP_XP_TARGET && nextStep) {
-          setJustUnlockedStep(nextStep);
-        }
-      } else if (
-        activeSong &&
-        activeConfig.mode === 'lesson' &&
-        activeConfig.targetStep
-      ) {
-        const nextStep =
-          nextXp >= STEP_XP_TARGET
-            ? getNextStepForSong(activeSong, activeConfig.targetStep, songProgress)
-            : null;
-        onRecordSongStepXp(activeSong.id, activeConfig.targetStep, nextXp, nextStep);
-        if (nextXp >= STEP_XP_TARGET && nextStep) {
-          setJustUnlockedStep(nextStep);
-        }
-      }
-    },
-    [
-      activeConfig,
-      activeSong,
-      activeStep,
-      onRecordSongStepXp,
-      queue.length,
-      songProgress,
-    ],
-  );
-
   // Real-time chord validation effect
   useEffect(() => {
     if (phase !== 'active' || !currentChord || !currentItem || !validation) return;
@@ -533,6 +448,12 @@ export function PlayScreen({
 
     if (awaitingRelease) {
       if (activeNotes.length === 0) setAwaitingRelease(false);
+      return;
+    }
+
+    // In lesson mode, once a chord is solved we wait for an explicit "Continuer"
+    // click. Never let sustained/replayed notes validate the same or next card.
+    if (activeConfig.mode === 'lesson' && lessonReadyToAdvance) {
       return;
     }
 
@@ -606,8 +527,6 @@ export function PlayScreen({
       setFeedback('success');
       setAwaitingRelease(true);
 
-      awardStepXp(!hadWrongNoteOnCurrent);
-
       if (activeConfig.mode === 'lesson' && hadWrongNoteOnCurrent) {
         const key = `${currentChord.id}@${activeStep}`;
         const prevRequeues = requeuedCountRef.current[key] ?? 0;
@@ -625,9 +544,9 @@ export function PlayScreen({
         }
       }
 
-      // Daily lessons deliberately use an explicit next action. It gives a
-      // beginner time to hear the success, release their hand, and understand
-      // what was just played; it also makes cascading MIDI validation impossible.
+      // Daily lessons wait for an explicit "Continuer" once the keys are
+      // released: the learner hears the success and the next card can never be
+      // validated by a chord that is still held.
       if (activeConfig.mode === 'lesson') {
         setLessonReadyToAdvance(true);
         isTransitioningRef.current = false;
@@ -682,7 +601,6 @@ export function PlayScreen({
     activeConfig.mode,
     activeNotes,
     activeStep,
-    awardStepXp,
     chordStartMs,
     challengeKey,
     currentChord,
@@ -790,10 +708,6 @@ export function PlayScreen({
       return;
     }
     setProgressionStepOverride(stepId);
-    const nextXp = activeSong ? getSongStepXp(activeSong.id, stepId, songProgress) : 0;
-    setStepXp(nextXp);
-    stepXpRef.current = nextXp;
-    setJustUnlockedStep(null);
     setFeedback('idle');
     setValidatedInCurrentBar(false);
     setHadWrongNoteOnCurrent(false);
@@ -883,524 +797,376 @@ export function PlayScreen({
   if (!currentChord || !currentItem) return null;
 
   const chordDisplay = formatChordName(currentChord, settings.notation);
-  const chordNotesDisplay = getChordNoteNames(
-    currentChord,
-    settings.notation,
-    activeStep,
-  ).join(' · ');
   const familyMeta = CHORD_FAMILIES[currentChord.family];
-  const stepLabel = activeSong
-    ? getSongStepLabel(activeSong, activeStep)
-    : VOICING_STEPS[activeStep].labelFr;
   const intervalLabels = getStepIntervalLabels(currentChord, activeStep);
   const expectedPitchClasses = getTargetPitchClassesForStep(currentChord, activeStep);
   const expectedVoicing = getSuggestedVoicingMidi(currentChord, 4, activeStep);
   const activeNotesLabels = formatActiveNotes(activeNotes, settings.notation);
-
-  const formattedTimer = (() => {
-    if (activeConfig.mode === 'session' && activeConfig.durationMinutes > 0) {
-      const remaining = Math.max(
-        0,
-        activeConfig.durationMinutes * 60 - elapsedSeconds,
-      );
-      const m = Math.floor(remaining / 60);
-      const s = remaining % 60;
-      return `${m}:${s.toString().padStart(2, '0')}`;
-    }
-    const m = Math.floor(elapsedSeconds / 60);
-    const s = elapsedSeconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  })();
 
   const progressText =
     activeConfig.mode === 'progression'
       ? `Tour ${loopNumber}${activeConfig.loopCount > 0 ? `/${activeConfig.loopCount}` : ''}`
       : `${currentIndex + 1} / ${queue.length}`;
 
-  const xpPercent = Math.min(100, Math.round((stepXp / STEP_XP_TARGET) * 100));
+  // Real progress through this lesson/session — not points.
+  const resolvedCount = attempts.length;
+  const lessonPercent =
+    activeConfig.mode === 'progression'
+      ? null
+      : Math.min(100, Math.round((resolvedCount / Math.max(1, queue.length)) * 100));
 
   const visibleLadderSteps = activeSong
     ? activeSong.availableSteps
     : VOICING_STEP_ORDER;
 
-  const currentLevelIndex = visibleLadderSteps.indexOf(activeStep) + 1;
-  const totalLevels = visibleLadderSteps.length;
 
-  const stageSurfaceClass =
+  const validationNow = validation;
+  const matchedSet = new Set(validationNow?.matchedPitchClasses ?? []);
+  const expectedNoteNames = getChordNoteNames(currentChord, settings.notation, activeStep);
+  const isLesson = activeConfig.mode === 'lesson';
+  const keysHeld = activeNotes.length > 0;
+
+  const mascotMood: MascotMood =
     feedback === 'success'
-      ? 'border-emerald-500/45 bg-emerald-50/70 dark:border-emerald-400/40 dark:bg-emerald-950/25'
+      ? 'happy'
       : feedback === 'wrong-note'
-        ? 'border-rose-500/45 bg-rose-50/70 dark:border-rose-400/40 dark:bg-rose-950/25'
+        ? 'oops'
+        : settings.listenAndRepeatEnabled && imitationState === 'listen'
+          ? 'listen'
+          : 'idle';
+
+  const coachLine = awaitingRelease && feedback === 'idle'
+    ? 'Relâchez toutes les touches, puis jouez l’accord suivant.'
+    : settings.listenAndRepeatEnabled && imitationState === 'listen'
+      ? 'Écoutez, et regardez les touches qui s’allument.'
+      : currentItem.tip
+        ? currentItem.tip
+        : activeStep === 'root'
+          ? 'Jouez juste la fondamentale, dans n’importe quelle octave.'
+          : activeStep === 'root-5th'
+            ? 'Jouez la fondamentale et la quinte ensemble.'
+            : 'Jouez toutes les notes, dans l’ordre que vous voulez.';
+
+  const footerTone =
+    feedback === 'success'
+      ? 'border-emerald-200 bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950'
+      : feedback === 'wrong-note'
+        ? 'border-rose-200 bg-rose-100 dark:border-rose-900 dark:bg-rose-950'
         : feedback === 'missed'
-          ? 'border-amber-500/45 bg-amber-50/60 dark:border-amber-400/40 dark:bg-amber-950/20'
-          : 'border-stone-200 bg-white dark:border-slate-800 dark:bg-[#151c2f]';
+          ? 'border-amber-200 bg-amber-100 dark:border-amber-900 dark:bg-amber-950'
+          : 'border-line bg-page';
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
-      {/* Top toolbar inside Play Screen */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex flex-wrap items-center gap-3 text-xs text-stone-600 dark:text-slate-300">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-stone-200/60 dark:hover:bg-slate-800"
+    <div className="fixed inset-0 z-40 flex flex-col bg-page text-text">
+      {/* Header: quit, real lesson progress, position */}
+      <header className="mx-auto flex w-full max-w-5xl items-center gap-4 px-4 pt-5 sm:px-8">
+        <button
+          type="button"
+          onClick={() => finishSession(undefined, true)}
+          aria-label="Terminer la séance"
+          title="Terminer la séance"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted hover:bg-mist hover:text-text"
+        >
+          <X className="h-6 w-6" strokeWidth={2.5} />
+        </button>
+        {lessonPercent !== null ? (
+          <div
+            className="mb-progress flex-1"
+            role="progressbar"
+            aria-label="Avancement de la leçon"
+            aria-valuenow={lessonPercent}
+            aria-valuemin={0}
+            aria-valuemax={100}
           >
-            <Usb
-              className={`h-3.5 w-3.5 ${
-                midiState.status === 'connected'
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : midiState.status === 'permission-denied'
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-stone-400 dark:text-slate-500'
-              }`}
-              aria-hidden="true"
-            />
-            <span>
-              {midiState.status === 'connected'
-                ? midiState.activeDeviceName
-                : midiState.status === 'permission-denied'
-                  ? 'MIDI refusé'
-                  : 'Clavier virtuel'}
-            </span>
-          </button>
-
-          <span aria-hidden="true" className="text-stone-300 dark:text-slate-700">
-            ·
-          </span>
-          <span className="font-medium text-stone-800 dark:text-slate-200">
-            {activeConfig.label}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="font-mono-tabular text-xs font-medium text-stone-600 dark:text-slate-300">
-            {progressText}
-          </span>
-          <span aria-hidden="true" className="text-stone-300 dark:text-slate-700">
-            ·
-          </span>
-          <span className="font-mono-tabular text-xs text-stone-500 dark:text-slate-400">
-            {formattedTimer}
-          </span>
+            <span style={{ width: `${Math.max(lessonPercent, 3)}%` }} />
+          </div>
+        ) : (
+          <p className="flex-1 truncate font-display text-lg font-semibold">{activeConfig.label}</p>
+        )}
+        <span className="shrink-0 font-display text-lg font-semibold text-muted tabular-nums">
+          {progressText}
+        </span>
+        {!isLesson && (
           <button
             type="button"
             onClick={() => setPhase('configuring')}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            aria-label="Configurer la séance"
+            title="Configurer la séance"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-muted hover:bg-mist hover:text-text"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Configurer</span>
+            <SlidersHorizontal className="h-5 w-5" />
           </button>
-          <button
-            type="button"
-            onClick={() => finishSession()}
-            className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            Terminer
-          </button>
-        </div>
-      </div>
-
-      {/* Visual XP Progress Bar */}
-      <section
-        aria-label="Barre d'expérience du niveau"
-        className="rounded-2xl border border-stone-200 bg-white px-5 py-3.5 dark:border-slate-800 dark:bg-[#151c2f]"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 font-medium text-stone-800 dark:text-slate-200">
-            <Sparkles
-              className={`h-3.5 w-3.5 ${
-                xpPercent >= 100
-                  ? 'text-emerald-500'
-                  : 'text-indigo-600 dark:text-indigo-400'
-              }`}
-              aria-hidden="true"
-            />
-            <span>
-              {activeSong
-                ? `Niveau ${currentLevelIndex}/${totalLevels} · ${getSongStepShortLabel(activeSong, activeStep)}`
-                : stepLabel}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {lastXpGain !== null && (
-              <span className="font-mono-tabular text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                +{lastXpGain} XP
-              </span>
-            )}
-            <span className="font-mono-tabular text-xs font-semibold text-indigo-600 dark:text-indigo-300">
-              {stepXp} / {STEP_XP_TARGET} XP
-            </span>
-          </div>
-        </div>
-
-        <div
-          className="mt-2.5 h-2.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-slate-800"
-          role="progressbar"
-          aria-valuenow={xpPercent}
-          aria-valuemin={0}
-          aria-valuemax={100}
+        )}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title={midiState.status === 'connected' ? (midiState.activeDeviceName ?? 'MIDI') : 'Aucun clavier MIDI'}
+          aria-label="État du clavier MIDI"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl hover:bg-mist"
         >
-          <div
-            className={`h-full rounded-full transition-all duration-300 ${
-              xpPercent >= 100
-                ? 'bg-emerald-500'
-                : 'bg-gradient-to-r from-indigo-500 to-violet-500 dark:from-indigo-400 dark:to-violet-400'
-            }`}
-            style={{ width: `${xpPercent}%` }}
-          />
-        </div>
+          <span className={`h-3 w-3 rounded-full ${midiState.status === 'connected' ? 'bg-green' : 'bg-stone-300'}`} />
+        </button>
+      </header>
 
-        {justUnlockedStep && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200/80 pt-3 dark:border-slate-800">
-            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-              Palier validé à 100 XP —{' '}
-              {activeSong
-                ? getSongStepLabel(activeSong, justUnlockedStep)
-                : VOICING_STEPS[justUnlockedStep].labelFr}{' '}
-              débloqué !
-            </p>
-            <button
-              type="button"
-              onClick={() => handleAdvanceToNextStep(justUnlockedStep)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500"
-            >
-              <span>Passer à l’étape suivante</span>
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </div>
-        )}
-      </section>
-
-      {/* Main Chord Stage */}
-      <section
-        className={`relative rounded-2xl border px-6 py-8 transition-colors duration-200 sm:px-10 sm:py-10 ${stageSurfaceClass}`}
-      >
-        {/* Progression Mode: Step-by-Step Ladder (Locked for guided songs) + Chord Strip + Tempo Controls */}
-        {activeConfig.mode === 'progression' && (
-          <div className="mb-8 flex flex-col items-center gap-4 border-b border-stone-200/70 pb-6 dark:border-slate-800/80">
-            <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 p-1 dark:border-slate-800 dark:bg-slate-900/70">
-              {visibleLadderSteps.map((stepId) => {
-                const isSelected = progressionStepOverride === stepId;
-                const isUnlocked = activeSong
-                  ? isStepUnlockedForSong(activeSong, stepId, songProgress)
-                  : true;
-                const label = activeSong
-                  ? getSongStepShortLabel(activeSong, stepId)
-                  : VOICING_STEPS[stepId].shortLabelFr;
-
-                return (
-                  <button
-                    key={stepId}
-                    type="button"
-                    disabled={!isUnlocked}
-                    title={
-                      isUnlocked
-                        ? VOICING_STEPS[stepId].descriptionFr
-                        : 'Atteignez 100 XP sur le palier précédent pour débloquer cette étape'
-                    }
-                    onClick={() => handleSwitchStepInProgression(stepId)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                      !isUnlocked
-                        ? 'cursor-not-allowed text-stone-400 opacity-55 dark:text-slate-500'
-                        : isSelected
-                          ? 'bg-white text-indigo-700 shadow-xs dark:bg-indigo-500 dark:text-white'
-                          : 'text-stone-600 hover:text-stone-900 dark:text-slate-400 dark:hover:text-slate-100'
-                    }`}
-                  >
-                    {!isUnlocked && (
-                      <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
-                    )}
-                    <span>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {queue.map((item, idx) => {
-                const isCurrent = idx === currentIndex;
-                return (
-                  <button
-                    key={`${item.chord.id}-${idx}`}
-                    type="button"
-                    onClick={() => {
-                      setCurrentIndex(idx);
-                      setCurrentBeat(0);
-                      setValidatedInCurrentBar(false);
-                      setFeedback('idle');
-                      setAwaitingRelease(true);
-                      setLessonReadyToAdvance(false);
-                    }}
-                    className={`rounded-lg px-3 py-1.5 font-display text-sm font-semibold transition-colors ${
-                      isCurrent
-                        ? 'bg-indigo-600 text-white dark:bg-indigo-500'
-                        : 'text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
-                    }`}
-                  >
-                    {formatChordName(item.chord, settings.notation)}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Progression Tempo, Pause, Repeat Chord Controls */}
-            <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
-              <div className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900/60">
-                <button
-                  type="button"
-                  aria-label="Ralentir le tempo"
-                  onClick={() => setProgressionTempo((t) => Math.max(36, t - 6))}
-                  className="rounded p-1 text-stone-600 hover:bg-stone-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <Minus className="h-3.5 w-3.5" />
-                </button>
-                <span className="min-w-16 text-center font-mono-tabular font-medium text-stone-800 dark:text-slate-200">
-                  {progressionTempo} BPM
-                </span>
-                <button
-                  type="button"
-                  aria-label="Accélérer le tempo"
-                  onClick={() => setProgressionTempo((t) => Math.min(130, t + 6))}
-                  className="rounded p-1 text-stone-600 hover:bg-stone-200/70 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsPaused((p) => !p)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 font-medium text-stone-700 transition-colors hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                {isPaused ? (
-                  <>
-                    <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Reprendre</span>
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Pause</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                aria-pressed={repeatCurrentChord}
-                onClick={() => setRepeatCurrentChord((r) => !r)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-medium transition-colors ${
-                  repeatCurrentChord
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200'
-                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200 dark:hover:bg-slate-800'
-                }`}
-              >
-                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>
-                  {repeatCurrentChord ? 'Accord verrouillé' : 'Répéter cet accord'}
-                </span>
-              </button>
-
-              {!repeatCurrentChord && (
-                <div className="flex items-center gap-1.5 pl-1" aria-hidden="true">
-                  {Array.from({ length: activeConfig.beatsPerChord }).map((_, i) => (
-                    <span
-                      key={i}
-                      className={`h-2 w-2 rounded-full transition-colors ${
-                        i === currentBeat && !isPaused
-                          ? 'bg-indigo-600 dark:bg-indigo-400'
-                          : 'bg-stone-300 dark:bg-slate-700'
+      <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center px-4 pt-4 pb-8 sm:px-8">
+          {/* Progression controls: chord strip, tempo, beat */}
+          {activeConfig.mode === 'progression' && (
+            <div className="mb-6 flex w-full flex-col items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                {visibleLadderSteps.map((stepId) => {
+                  const isSelected = progressionStepOverride === stepId;
+                  const isUnlocked = activeSong
+                    ? isStepUnlockedForSong(activeSong, stepId, songProgress)
+                    : true;
+                  const label = activeSong
+                    ? getSongStepShortLabel(activeSong, stepId)
+                    : VOICING_STEPS[stepId].shortLabelFr;
+                  return (
+                    <button
+                      key={stepId}
+                      type="button"
+                      disabled={!isUnlocked}
+                      title={
+                        isUnlocked
+                          ? VOICING_STEPS[stepId].descriptionFr
+                          : 'Réussissez une séance complète du palier précédent pour débloquer cette étape'
+                      }
+                      onClick={() => handleSwitchStepInProgression(stepId)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl border-2 px-3 py-1.5 text-sm font-bold whitespace-nowrap ${
+                        !isUnlocked
+                          ? 'cursor-not-allowed border-transparent text-muted opacity-50'
+                          : isSelected
+                            ? 'border-sky bg-sky/10 text-sky-press dark:text-sky'
+                            : 'border-line text-muted hover:text-text'
                       }`}
-                    />
-                  ))}
+                    >
+                      {!isUnlocked && <Lock className="h-3 w-3" aria-hidden="true" />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {queue.map((item, idx) => {
+                  const isCurrent = idx === currentIndex;
+                  return (
+                    <button
+                      key={`${item.chord.id}-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        setCurrentIndex(idx);
+                        setCurrentBeat(0);
+                        setValidatedInCurrentBar(false);
+                        setFeedback('idle');
+                        setAwaitingRelease(true);
+                        setLessonReadyToAdvance(false);
+                      }}
+                      className={`min-w-14 rounded-xl px-3 py-2 font-display text-lg font-semibold transition-colors ${
+                        isCurrent
+                          ? 'bg-ink text-white shadow-[0_4px_0_#0c0f1f] dark:bg-white dark:text-ink'
+                          : 'bg-mist text-muted hover:text-text'
+                      }`}
+                    >
+                      {formatChordName(item.chord, settings.notation)}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 text-sm font-bold">
+                <div className="flex items-center gap-1 rounded-xl border-2 border-line px-1.5 py-1">
+                  <button type="button" aria-label="Ralentir le tempo" onClick={() => setProgressionTempo((t) => Math.max(36, t - 6))} className="rounded-lg p-1.5 hover:bg-mist">
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="min-w-20 text-center tabular-nums">{progressionTempo} BPM</span>
+                  <button type="button" aria-label="Accélérer le tempo" onClick={() => setProgressionTempo((t) => Math.min(130, t + 6))} className="rounded-lg p-1.5 hover:bg-mist">
+                    <Plus className="h-4 w-4" />
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Central Chord Display */}
-        <div className="flex flex-col items-center text-center">
-          {settings.listenAndRepeatEnabled && (
-            <div
-              className={`mb-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition-colors ${
-                imitationState === 'listen'
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'
-                  : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200'
-              }`}
-              aria-live="polite"
-            >
-              {imitationState === 'listen' ? (
-                <><Volume2 className="h-3.5 w-3.5" aria-hidden="true" /> Étape 1 · Écoutez et regardez le clavier</>
-              ) : (
-                <><Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /> Étape 2 · À vous de reproduire</>
-              )}
+                <button type="button" onClick={() => setIsPaused((p) => !p)} className="mb-btn mb-btn-ghost mb-btn-sm">
+                  {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                  {isPaused ? 'Reprendre' : 'Pause'}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={repeatCurrentChord}
+                  onClick={() => setRepeatCurrentChord((r) => !r)}
+                  className={`mb-btn mb-btn-sm ${repeatCurrentChord ? 'mb-btn-sky' : 'mb-btn-ghost'}`}
+                >
+                  <Lock className="h-4 w-4" />
+                  {repeatCurrentChord ? 'Accord verrouillé' : 'Répéter cet accord'}
+                </button>
+                {!repeatCurrentChord && (
+                  <div className="flex items-center gap-1.5 pl-1" aria-hidden="true">
+                    {Array.from({ length: activeConfig.beatsPerChord }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`h-3 w-3 rounded-full transition-colors ${
+                          i === currentBeat && !isPaused ? 'bg-brass' : 'bg-line'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-stone-500 dark:text-slate-400">
-            <span className="text-indigo-600 dark:text-indigo-300">{stepLabel}</span>
-            <span aria-hidden="true">·</span>
-            <span>{familyMeta.labelFr}</span>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono">{intervalLabels.join(' ')}</span>
-            {activeConfig.mode === 'lesson' && currentItem.isNewConcept && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="font-semibold text-indigo-600 dark:text-indigo-300">
-                  Nouveau
-                </span>
-              </>
-            )}
+
+          {/* Coach: the mascot speaks the instruction */}
+          <div className="flex w-full max-w-2xl items-end gap-3">
+            <Mascot size={88} mood={mascotMood} className="shrink-0" />
+            <div className="relative mb-6 rounded-2xl border-2 border-line bg-surface px-4 py-3 text-base font-bold">
+              <span
+                aria-hidden="true"
+                className="absolute -left-[9px] bottom-4 h-4 w-4 rotate-45 border-b-2 border-l-2 border-line bg-surface"
+              />
+              {isLesson && currentItem.isNewConcept && (
+                <span className="mr-2 rounded-md bg-brass px-1.5 py-0.5 text-xs font-extrabold text-ink">Nouveau</span>
+              )}
+              <span aria-live="polite">{coachLine}</span>
+            </div>
           </div>
 
-          <div
-            className="mt-4 font-display text-6xl font-bold tracking-tight text-stone-900 sm:text-7xl dark:text-white"
-            aria-live="polite"
+          {/* Target chord */}
+          <h1
+            data-testid="chord-name"
+            className="mt-1 font-display text-[4.5rem] leading-none font-bold tracking-tight sm:text-[6rem]"
           >
             {chordDisplay}
-          </div>
+          </h1>
+          <p className="mt-2 text-base font-bold text-muted">
+            {familyMeta.labelFr}
+            {activeSong ? `, ${getSongStepShortLabel(activeSong, activeStep).replace(/^\d+ · /, '').toLowerCase()}` : ''}
+          </p>
 
-          {currentItem.tip && (
-            <p className="mt-3 max-w-lg text-sm text-stone-600 dark:text-slate-300">
-              {currentItem.tip}
-            </p>
+          {/* Expected notes, lighting up as they are found */}
+          <div className="mt-4 flex flex-wrap items-start justify-center gap-2.5">
+            {expectedPitchClasses.map((pc, i) => {
+              const found = matchedSet.has(pc);
+              return (
+                <div key={pc} className="flex flex-col items-center gap-1">
+                  <span
+                    className={`grid h-14 min-w-14 place-items-center rounded-2xl border-2 px-2 font-display text-xl font-semibold transition-colors ${
+                      found
+                        ? 'border-green bg-green text-white shadow-[0_4px_0_var(--color-green-press)]'
+                        : 'border-line bg-surface shadow-[0_4px_0_var(--mb-line)]'
+                    }`}
+                  >
+                    {showChordNotesText || found ? expectedNoteNames[i] : '?'}
+                  </span>
+                  <span className="text-xs font-extrabold text-muted">{intervalLabels[i]}</span>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowChordNotesText((v) => !v)}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-bold text-sky-press hover:bg-sky/10 dark:text-sky"
+          >
+            {showChordNotesText ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showChordNotesText ? 'Masquer les notes' : 'Voir les notes'}
+          </button>
+          {activeNotesLabels.length > 0 && (
+            <p className="mt-1 text-sm font-bold text-muted">Vous jouez : {activeNotesLabels.join(' ')}</p>
           )}
 
-          {/* Expected Notes / Played Notes */}
-          <div className="mt-3.5 flex flex-wrap items-center justify-center gap-3 text-xs">
-            <button
-              type="button"
-              onClick={() => setShowChordNotesText((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-stone-500 transition-colors hover:text-stone-800 dark:text-slate-400 dark:hover:text-slate-200"
-            >
-              {showChordNotesText ? (
-                <>
-                  <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span className="font-mono">{chordNotesDisplay}</span>
-                </>
-              ) : (
-                <>
-                  <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Voir les notes attendues</span>
-                </>
-              )}
-            </button>
-
-            {activeNotesLabels.length > 0 && (
-              <>
-                <span aria-hidden="true" className="text-stone-300 dark:text-slate-700">
-                  ·
-                </span>
-                <span className="font-mono text-indigo-600 dark:text-indigo-300">
-                  Jouées : {activeNotesLabels.join(' ')}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Accessible Feedback Indicator */}
-          <div className="mt-6 flex min-h-8 items-center justify-center">
-            {feedback === 'success' && (
-              <div className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                <span>
-                  {lessonReadyToAdvance
-                    ? 'Accord validé — relâchez, puis continuez'
-                    : requeueNotice
-                    ? 'Validé — on le reverra en fin de leçon pour le fixer'
-                    : 'Accord validé'}
-                </span>
-              </div>
-            )}
-            {feedback === 'wrong-note' && (
-              <div className="inline-flex items-center gap-2 text-sm font-medium text-rose-700 dark:text-rose-300">
-                <AlertCircle className="h-4 w-4" aria-hidden="true" />
-                <span>
-                  Note étrangère — jouez uniquement {chordNotesDisplay}
-                </span>
-              </div>
-            )}
-            {feedback === 'missed' && (
-              <div className="inline-flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
-                <SkipForward className="h-4 w-4" aria-hidden="true" />
-                <span>
-                  {requeueNotice
-                    ? 'Passé — il reviendra en fin de leçon'
-                    : 'Accord passé'}
-                </span>
-              </div>
-            )}
-            {feedback === 'idle' && (
-              <p className="text-sm text-stone-500 dark:text-slate-400">
-                {awaitingRelease
-                  ? 'Relâchez toutes les touches avant le prochain accord'
-                  : imitationState === 'listen'
-                    ? 'Écoutez la couleur de l’accord et observez les touches éclairées'
-                    : activeStep === 'root'
-                  ? 'Appuyez simplement sur la note fondamentale (n’importe quelle octave)'
-                  : activeStep === 'root-5th'
-                    ? 'Jouez la fondamentale et sa quinte ensemble'
-                    : 'Jouez les notes dans le renversement de votre choix'}
-              </p>
-            )}
-          </div>
-
-          {/* Secondary Utility Actions */}
-          <div className="mt-5 flex items-center gap-3">
-            {activeConfig.mode === 'lesson' && lessonReadyToAdvance && (
-              <button
-                type="button"
-                disabled={activeNotes.length > 0}
-                onClick={handleContinueLesson}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-400"
-              >
-                <span>{activeNotes.length > 0 ? 'Relâchez les touches' : 'Continuer'}</span>
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => pianoSynth.playChordPreview(expectedVoicing)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Écouter</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleSkipChord}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-            >
-              <SkipForward className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Passer</span>
-            </button>
+          {/* The keyboard is the centre of the lesson */}
+          <div className="mt-4 w-full">
+            <VirtualKeyboard
+              isOpen={settings.showKeyboardHelper}
+              onToggleOpen={() =>
+                onUpdateSettings({ showKeyboardHelper: !settings.showKeyboardHelper })
+              }
+              showExpectedHelper={showExpectedHelper}
+              onToggleExpectedHelper={() => setShowExpectedHelper((v) => !v)}
+              showNoteLabels={settings.showKeyboardNotes}
+              latchMode={latchMode}
+              onToggleLatchMode={() => setLatchMode((v) => !v)}
+              activeNotes={activeNotes}
+              expectedPitchClasses={expectedPitchClasses}
+              expectedVoicingNotes={expectedVoicing}
+              notation={settings.notation}
+              onPressNote={onPressVirtualNote}
+              onReleaseNote={onReleaseVirtualNote}
+              onToggleLatchNote={onToggleLatchNote}
+              onReleaseAllVirtual={onClearVirtualLatchNotes}
+              hasLatchedNotes={virtualLatchNotes.length > 0}
+            />
           </div>
         </div>
-      </section>
+      </main>
 
-      {/* Collapsible Interactive Virtual Keyboard */}
-      <VirtualKeyboard
-        isOpen={settings.showKeyboardHelper}
-        onToggleOpen={() =>
-          onUpdateSettings({ showKeyboardHelper: !settings.showKeyboardHelper })
-        }
-        showExpectedHelper={showExpectedHelper}
-        onToggleExpectedHelper={() => setShowExpectedHelper((v) => !v)}
-        showNoteLabels={settings.showKeyboardNotes}
-        latchMode={latchMode}
-        onToggleLatchMode={() => setLatchMode((v) => !v)}
-        activeNotes={activeNotes}
-        expectedPitchClasses={expectedPitchClasses}
-        expectedVoicingNotes={expectedVoicing}
-        notation={settings.notation}
-        onPressNote={onPressVirtualNote}
-        onReleaseNote={onReleaseVirtualNote}
-        onToggleLatchNote={onToggleLatchNote}
-        onReleaseAllVirtual={onClearVirtualLatchNotes}
-        onPlayPreview={() => pianoSynth.playChordPreview(expectedVoicing)}
-        hasLatchedNotes={virtualLatchNotes.length > 0}
-      />
+      {/* Feedback footer — Duolingo-style verdict and the single next action */}
+      <footer className={`border-t-2 transition-colors ${footerTone}`}>
+        <div className="mx-auto flex min-h-28 w-full max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-8">
+          {feedback === 'success' ? (
+            <div className="mb-pop flex items-center gap-4 text-emerald-700 dark:text-emerald-300">
+              <span className="grid h-14 w-14 place-items-center rounded-full bg-white text-green dark:bg-emerald-900">
+                <CheckCircle2 className="h-9 w-9" strokeWidth={2.5} />
+              </span>
+              <div>
+                <p className="font-display text-2xl font-bold">Bien joué !</p>
+                <p className="font-bold">
+                  {requeueNotice
+                    ? 'Validé. On le rejoue en fin de leçon pour le fixer.'
+                    : isLesson
+                      ? `${chordDisplay} : ${expectedNoteNames.join(', ')}. Relâchez, puis continuez.`
+                      : `${chordDisplay} : ${expectedNoteNames.join(', ')}`}
+                </p>
+              </div>
+            </div>
+          ) : feedback === 'wrong-note' ? (
+            <div className="mb-pop flex items-center gap-4 text-rose-700 dark:text-rose-300">
+              <span className="grid h-14 w-14 place-items-center rounded-full bg-white text-coral dark:bg-rose-900">
+                <AlertCircle className="h-9 w-9" strokeWidth={2.5} />
+              </span>
+              <div>
+                <p className="font-display text-2xl font-bold">Pas tout à fait</p>
+                <p className="font-bold">
+                  Note étrangère : jouez seulement {expectedNoteNames.join(', ')}.
+                </p>
+              </div>
+            </div>
+          ) : feedback === 'missed' ? (
+            <div className="mb-pop flex items-center gap-4 text-amber-800 dark:text-amber-300">
+              <SkipForward className="h-8 w-8" />
+              <p className="font-display text-xl font-bold">
+                {requeueNotice ? 'Passé : il reviendra en fin de leçon.' : 'Accord passé.'}
+              </p>
+            </div>
+          ) : (
+            <button type="button" onClick={handleSkipChord} className="mb-btn mb-btn-ghost">
+              <SkipForward className="h-5 w-5" />
+              Passer
+            </button>
+          )}
+
+          <div className="flex items-center gap-3">
+            {feedback !== 'success' && (
+              <button
+                type="button"
+                onClick={() => pianoSynth.playChordPreview(expectedVoicing)}
+                className={`mb-btn ${feedback === 'wrong-note' ? 'mb-btn-coral' : 'mb-btn-sky'}`}
+              >
+                <Volume2 className="h-5 w-5" />
+                Écouter
+              </button>
+            )}
+            {isLesson && lessonReadyToAdvance && (
+              <button
+                type="button"
+                disabled={keysHeld}
+                onClick={handleContinueLesson}
+                className="mb-btn mb-btn-green min-w-44"
+              >
+                {keysHeld ? 'Relâchez les touches' : 'Continuer'}
+                {!keysHeld && <ArrowRight className="h-5 w-5" />}
+              </button>
+            )}
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
