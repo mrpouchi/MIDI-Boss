@@ -232,7 +232,7 @@ export function SettingsDrawer({
                   ))}
                 </select>
                 <p className="mt-1.5 text-[11px] text-muted">
-                  Grand piano : Splendid Grand Piano, échantillonné à plusieurs nuances (20 Mo, téléchargés une fois puis gardés par le navigateur). Autres sons : MIDI.js MusyngKite.
+                  Grand piano Salamander : Yamaha C5, 8 nuances, fichiers locaux (local-sounds/) — Alexander Holm, CC-BY 3.0. Absent ? Le Splendid Grand Piano (en ligne) prend le relais. Autres sons : MIDI.js MusyngKite.
                   Le synthé de secours prend le relais pendant le chargement.
                 </p>
                 {latency && (

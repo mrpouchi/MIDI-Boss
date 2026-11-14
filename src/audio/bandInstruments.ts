@@ -14,10 +14,14 @@
  * around −44 dB, smplr instruments 9 to 20 dB louder).
  */
 
+import { SALAMANDER_PRESET_URL } from './localSounds';
+
 export type Family = 'piano' | 'bass' | 'sax' | 'trumpet' | 'brass' | 'guitar' | 'organ' | 'drums' | 'other';
 
 export type SoundSource =
   | { engine: 'smplr'; kind: 'splendid'; trim: number }
+  /** An instrument in local-sounds/ (git-ignored): falls back to Splendid when absent. */
+  | { engine: 'smplr'; kind: 'local'; url: string; trim: number }
   | { engine: 'smplr'; kind: 'smolken'; instrument: string; trim: number }
   | { engine: 'smplr'; kind: 'versilian'; instrument: string; trim: number }
   | { engine: 'smplr'; kind: 'electricPiano'; instrument: string; trim: number }
@@ -42,6 +46,8 @@ const waf = (id: string, label: string, bank: string, program?: number): SoundOp
 
 export const SOUND_LIBRARY: Record<Family, SoundOption[]> = {
   piano: [
+    // Salamander: −34.8 dB at velocity 90 (vs −43.9 for the banks) → 0.35.
+    { id: 'piano-salamander', label: 'Grand piano Salamander, Yamaha C5', source: { engine: 'smplr', kind: 'local', url: SALAMANDER_PRESET_URL, trim: 0.35 } },
     { id: 'piano-splendid', label: 'Grand piano de concert (Splendid)', source: { engine: 'smplr', kind: 'splendid', trim: 0.155 } },
     waf('piano-steinway', 'Steinway (AirFont)', 'AirFont380', 0),
     waf('piano-yamaha', 'Yamaha (FluidR3)', 'FluidR3', 0),

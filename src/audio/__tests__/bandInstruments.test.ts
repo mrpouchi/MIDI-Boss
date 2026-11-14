@@ -13,7 +13,7 @@ describe('band sound library', () => {
   it('defaults to the real sampled instruments, an electric part to an electric sound', () => {
     expect(defaultSound(32, 1).id).toBe('bass-smolken');
     expect(defaultSound(66, 2).id).toBe('sax-vcsl-vib');
-    expect(defaultSound(0, 3).id).toBe('piano-splendid');
+    expect(defaultSound(0, 3).id).toBe('piano-salamander');
     expect(defaultSound(33, 1).id).toBe('bass-jazz');
     expect(defaultSound(59, 0).id).toBe('tp-muted');
     expect(defaultSound(0, 9).id).toBe('drums-jazz');

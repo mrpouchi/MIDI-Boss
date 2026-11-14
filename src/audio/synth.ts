@@ -1,4 +1,5 @@
 import { CacheStorage, Soundfont, SplendidGrandPiano } from 'smplr';
+import { LocalInstrument, SALAMANDER_PRESET_URL } from './localSounds';
 import type { InstrumentId } from '../storage/types';
 
 interface ActiveVoice {
@@ -17,10 +18,20 @@ export interface InstrumentDefinition {
    * 'splendid': the Splendid Grand Piano (multi-velocity sampled grand,
    * smpldsnds.github.io), far more natural than the General MIDI soundfont.
    */
-  engine?: 'soundfont' | 'splendid';
+  engine?: 'soundfont' | 'splendid' | 'salamander';
 }
 
-type LoadedInstrument = ReturnType<typeof Soundfont> | ReturnType<typeof SplendidGrandPiano>;
+type LoadedInstrument =
+  | ReturnType<typeof Soundfont>
+  | ReturnType<typeof SplendidGrandPiano>
+  | ReturnType<typeof LocalInstrument>;
+
+/**
+ * Salamander comes out ~7 dB below Splendid at velocity 90 (measured offline,
+ * one C4 for 2 s: −34.8 vs −27.7 dB RMS); this boost matches them. Its wider
+ * dynamic range (−16 dB at velocity 40) is kept.
+ */
+const SALAMANDER_KEYBOARD_GAIN = 2.27;
 
 /** Samples are cached by the browser (Cache API): downloaded once, then offline. */
 let sampleCache: InstanceType<typeof CacheStorage> | undefined;
@@ -34,7 +45,8 @@ function cachedStorage() {
 }
 
 export const INSTRUMENTS: InstrumentDefinition[] = [
-  { id: 'piano', label: 'Grand piano', soundfont: 'acoustic_grand_piano', engine: 'splendid' },
+  { id: 'piano', label: 'Grand piano Salamander (Yamaha C5)', soundfont: 'acoustic_grand_piano', engine: 'salamander' },
+  { id: 'splendid', label: 'Grand piano Splendid', soundfont: 'acoustic_grand_piano', engine: 'splendid' },
   { id: 'rhodes', label: 'Piano électrique (Rhodes)', soundfont: 'electric_piano_1' },
   { id: 'vibraphone', label: 'Vibraphone', soundfont: 'vibraphone', loop: true },
   { id: 'organ', label: 'Orgue jazz', soundfont: 'drawbar_organ', loop: true },
@@ -167,7 +179,11 @@ class PianoSynthEngine {
     if (this.instrument && this.instrumentStatus.id === id && this.instrumentStatus.state === 'ready') {
       return;
     }
+    this.loadInstrument(id, false);
+  }
 
+  /** `fallback`: the local Salamander is missing, load the online grand piano. */
+  private loadInstrument(id: InstrumentId, fallback: boolean): void {
     this.instrumentId = id;
     this.loadToken += 1;
     const token = this.loadToken;
@@ -199,8 +215,18 @@ class PianoSynthEngine {
     // (plusieurs couches de vélocité), les autres de la banque MIDI.js
     // (MusyngKite). Le contexte peut rester suspendu tant que l'utilisateur
     // n'a pas interagi ; le décodage des samples fonctionne.
+    // Salamander (local files, see local-sounds/README.md); Splendid if absent.
+    const engine = definition.engine === 'salamander' && fallback ? 'splendid' : definition.engine;
+    let boost: GainNode | null = null;
+    if (engine === 'salamander') {
+      boost = ctx.createGain();
+      boost.gain.value = SALAMANDER_KEYBOARD_GAIN;
+      boost.connect(this.masterGain);
+    }
     const instrument: LoadedInstrument =
-      definition.engine === 'splendid'
+      engine === 'salamander' && boost
+        ? LocalInstrument(ctx, { url: SALAMANDER_PRESET_URL, destination: boost, volume: 127, onLoadProgress })
+        : engine === 'splendid'
         ? SplendidGrandPiano(ctx, {
             destination: this.masterGain,
             volume: 127,
@@ -236,7 +262,13 @@ class PianoSynthEngine {
         if (token !== this.loadToken) return;
         console.warn("Impossible de charger l'instrument échantillonné", error);
         instrument.dispose();
+        boost?.disconnect();
         if (this.instrument === instrument) this.instrument = null;
+        if (engine === 'salamander') {
+          // Files not in local-sounds/: the online grand piano instead.
+          this.loadInstrument(id, true);
+          return;
+        }
         this.updateInstrumentStatus({ id, state: 'error', loaded: 0, total: 0 });
       });
   }

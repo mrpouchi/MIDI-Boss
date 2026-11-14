@@ -11,3 +11,7 @@ coverage/
 local-songs/*
 !local-songs/README.md
 *.tsbuildinfo
+
+# Sons locaux (gros échantillons, licences propres) : jamais dans le dépôt
+local-sounds/*
+!local-sounds/README.md

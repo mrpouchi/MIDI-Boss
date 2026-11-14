@@ -472,6 +472,16 @@ Règle produit : une fois « Jouer » cliqué, la séance tient sur un écran sa
 - Un morceau où l'on a navigué compte comme entraînement : il ne valide pas d'objectif, et le conseil final le dit.
 - Correctif d'arrondi : un curseur posé exactement sur une barre de mesure affichait la mesure d'avant (`barGlobal` + 1e-6).
 
+## Salamander Grand Piano (14 novembre 2026)
+
+- Source : `~/Documents/eph/Midi/GrandPiano.xz` (Salamander Grand Piano V3, 44,1 kHz / 16 bits, SFZ, Alexander Holm, CC-BY 3.0), environ 1,2 Go décompressé.
+- Converti dans `local-sounds/salamander/` (ignoré par git, voir son README) : 30 notes × 8 nuances sur 16 (v2…v16, plages de vélocité fusionnées deux à deux), notes coupées avec un fondu (8 s grave, 6 s médium, 4 s aigu), Opus 128 kbit/s. 240 fichiers, 25 Mo, plus `preset.json` (preset smplr généré depuis le SFZ ; les zones de C4 n'ont pas de `pitch_keycenter`, donc 60 par défaut). Clavier couvert de A0 à C8, sans trou.
+- `src/audio/localSounds.ts` : `LocalInstrument` (instrument smplr à partir d'une URL de preset).
+- Clavier : l'instrument « piano » = Salamander, avec un gain ×2,27 (mesuré : −34,8 dB contre −27,7 dB pour Splendid à vélocité 90). S'il manque, le Splendid prend automatiquement le relais. Le Splendid reste aussi un choix séparé (`splendid`).
+- Orchestre : `piano-salamander` est le premier son de la famille piano, donc le choix par défaut (trim 0,35) ; repli sur le Splendid si les fichiers sont absents.
+- Vérifié : les 240 fichiers se chargent ; repli testé en masquant le dossier ; séquenceur toujours à 0 ms d'écart.
+- En production (`vite build`), `local-sounds/` n'est pas copié : c'est fait pour un usage local avec le serveur de dev.
+
 ## Git et modifications non commit (PÉRIMÉ : ces fichiers sont commités dans 7fe9742)
 
 Dernier commit de base : `273b893 feat: initialize project structure and base UI`.

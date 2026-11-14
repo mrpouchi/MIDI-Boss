@@ -3,6 +3,7 @@ import { CacheStorage, ElectricPiano, Smolken, Soundfont, SplendidGrandPiano, Ve
 import WebAudioFontPlayer from 'webaudiofontplayer';
 import { SoundOption, familyOf, resolveSound, soundfontName, wafProgram } from './bandInstruments';
 import { drumKitPreset, presetFor } from './presets';
+import { LocalInstrument } from './localSounds';
 
 /** A smplr instrument: notes scheduled at an exact AudioContext time too. */
 interface SampledInstrument {
@@ -335,6 +336,7 @@ async function createVoice(ctx: AudioContext, option: SoundOption, program: numb
     else if (source.kind === 'versilian') instrument = Versilian(ctx, { ...common, instrument: source.instrument });
     else if (source.kind === 'electricPiano') instrument = ElectricPiano(ctx, { ...common, instrument: source.instrument });
     else if (source.kind === 'soundfont') instrument = Soundfont(ctx, { ...common, kit: 'MusyngKite', instrument: soundfontName(source, program) });
+    else if (source.kind === 'local') instrument = LocalInstrument(ctx, { destination: trim, volume: 100, url: source.url });
     else instrument = SplendidGrandPiano(ctx, { ...common, decayTime: 0.6 });
     try {
       await instrument.ready;
@@ -342,6 +344,10 @@ async function createVoice(ctx: AudioContext, option: SoundOption, program: numb
     } catch {
       instrument.dispose();
       trim.disconnect();
+      // A local instrument whose files are missing: the online grand piano.
+      if (source.kind === 'local') {
+        return createVoice(ctx, { id: 'piano-splendid', label: '', source: { engine: 'smplr', kind: 'splendid', trim: 0.155 } }, program, channel, gain);
+      }
     }
   }
   const preset =

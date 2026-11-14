@@ -3,7 +3,7 @@ import { IrealSong } from '../music/ireal';
 
 export type ThemeMode = 'dark' | 'light';
 
-export type InstrumentId = 'piano' | 'rhodes' | 'vibraphone' | 'organ';
+export type InstrumentId = 'piano' | 'splendid' | 'rhodes' | 'vibraphone' | 'organ';
 
 export interface AppSettings {
   theme: ThemeMode;
