@@ -38,18 +38,19 @@ export function runMeetsObjective(run: PlayAlongRun, song: PathSong, objective: 
   return run.bpm >= resolveTempo(objective.tempo, run.originalBpm) - 1;
 }
 
-export function buildSongPath(units: PathUnit[], runs: PlayAlongRun[]): SongView[] {
+/** `unlockAll` (admin profile): every song and objective is open; progress still shows. */
+export function buildSongPath(units: PathUnit[], runs: PlayAlongRun[], unlockAll = false): SongView[] {
   const views: SongView[] = [];
   let previousDone = OBJECTIVES_TO_UNLOCK_NEXT_SONG;
   for (const unit of units) {
     for (const song of unit.songs) {
-      const unlocked = previousDone >= OBJECTIVES_TO_UNLOCK_NEXT_SONG;
+      const unlocked = unlockAll || previousDone >= OBJECTIVES_TO_UNLOCK_NEXT_SONG;
       const done = song.objectives.map((o) => runs.some((r) => runMeetsObjective(r, song, o)));
       let open = unlocked;
       const objectives = song.objectives.map((objective, i): ObjectiveView => {
         if (done[i]) return { objective, state: 'done' };
         if (open) {
-          open = false;
+          open = unlockAll;
           return { objective, state: 'open' };
         }
         return { objective, state: 'locked' };

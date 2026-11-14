@@ -237,3 +237,14 @@ export function chartChordSequence(chart: ChordChart): ChordDefinition[] {
   }
   return out;
 }
+
+/** Root pitch class of the chord sounding at each bar's downbeat ("%" bars repeat the previous chord). */
+export function chartBarRoots(chart: ChordChart): number[] {
+  const out: number[] = [];
+  let current = chart.bars.find((b) => b.length)?.[0]?.chord.root ?? 0;
+  for (const bar of chart.bars) {
+    if (bar.length) current = bar[0].chord.root;
+    out.push(current);
+  }
+  return out;
+}

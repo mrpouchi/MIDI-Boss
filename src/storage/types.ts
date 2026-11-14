@@ -19,6 +19,10 @@ export interface AppSettings {
   dailyGoalChords: number;
   /** Play-along: compensates audio output + input latency (ms). Optional for old saves. */
   playAlongLatencyMs?: number;
+  /** "Suivant" gesture chord (pitch classes): struck 3 times quickly, it triggers the main action. */
+  gestureChord?: number[];
+  /** Band sounds chosen per song: song title key → MIDI channel (0–15) → sound id. */
+  bandSounds?: Record<string, Record<string, string>>;
 }
 
 export interface ChordStat {

@@ -1,5 +1,5 @@
 import { Check, Lock, Play, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LocalSongFile, findLocalSong, songTitleKey } from '../../content/localSongs';
 import { PathSong, SONG_PATH, SongObjective, TEMPO_LABEL } from '../../content/songPath';
 import { MidiState } from '../../input/types';
@@ -22,6 +22,8 @@ interface PathScreenProps {
     goal: { song: PathSong; objective: SongObjective },
   ) => void;
   onOpenLibrary: () => void;
+  /** Admin profile: nothing locked. */
+  unlockAll?: boolean;
 }
 
 const UNIT_COLORS = [
@@ -66,15 +68,31 @@ const FACE: Record<ObjectiveState, string> = {
   locked: 'bg-line text-muted shadow-[0_6px_0_var(--mb-press-neutral)]',
 };
 
-export function PathScreen({ storedData, midiState, onStartPractice, onPlayAlong, onOpenLibrary }: PathScreenProps) {
+export function PathScreen({ storedData, midiState, onStartPractice, onPlayAlong, onOpenLibrary, unlockAll = false }: PathScreenProps) {
   const runs = storedData.playAlongRuns ?? [];
   const library = storedData.irealLibrary ?? [];
-  const views = buildSongPath(SONG_PATH, runs);
+  const views = buildSongPath(SONG_PATH, runs, unlockAll);
   const active = currentSong(views);
   const warmup = generateDuolingoMicroLesson(storedData, storedData.settings.notation);
   const nextSkills = recommendNextSkills(assessSkills(storedData.spacedCards, storedData.chordStats, runs), 2);
   const activeObjective = active?.objectives.find((o) => o.state === 'current');
-  const [openNode, setOpenNode] = useState<string | null>(activeObjective?.objective.id ?? null);
+  const [openNode, setOpenNode] = useState<string | null>(null);
+  // The bubble opens on hover. Closing waits a little, so the pointer can cross
+  // the gap between the node and its bubble without losing it.
+  const closeTimer = useRef<number | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const hoverOpen = (id: string) => {
+    cancelClose();
+    setOpenNode(id);
+  };
+  const hoverClose = (id: string) => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setOpenNode((cur) => (cur === id ? null : cur)), 250);
+  };
+  useEffect(() => cancelClose, []);
 
   const chartFor = (song: PathSong) => library.find((s) => songTitleKey(s.title) === songTitleKey(song.title));
 
@@ -162,6 +180,8 @@ export function PathScreen({ storedData, midiState, onStartPractice, onPlayAlong
                             key={objective.id}
                             className={`relative ${isOpen ? 'z-30' : 'z-0'}`}
                             style={{ transform: `translateX(${offset}px)` }}
+                            onMouseEnter={() => hoverOpen(objective.id)}
+                            onMouseLeave={() => hoverClose(objective.id)}
                           >
                             {state === 'current' && !isOpen && (
                               <span className="mb-pop absolute -top-11 left-1/2 -translate-x-1/2 rounded-xl border-2 border-line bg-surface px-3 py-1.5 font-display text-sm font-semibold whitespace-nowrap text-brass-press">
@@ -171,7 +191,7 @@ export function PathScreen({ storedData, midiState, onStartPractice, onPlayAlong
                             <div className={state === 'current' && !isOpen ? 'mb-bob' : ''}>
                             <button
                               type="button"
-                              onClick={() => setOpenNode(isOpen ? null : objective.id)}
+                              onClick={() => hoverOpen(objective.id)}
                               aria-expanded={isOpen}
                               aria-label={`${displayTitle(song.title)} : ${objective.label}${state === 'done' ? ' (validé)' : state === 'locked' ? ' (verrouillé)' : ''}`}
                               className={`mb-node relative grid h-[72px] w-[78px] place-items-center rounded-[50%] ${FACE[state]}`}
@@ -186,7 +206,7 @@ export function PathScreen({ storedData, midiState, onStartPractice, onPlayAlong
                             </button>
                             </div>
 
-                            {state === 'current' && isActive && (
+                            {state === 'current' && isActive && !isOpen && (
                               <Mascot
                                 size={92}
                                 className={`pointer-events-none absolute top-1/2 hidden -translate-y-1/2 sm:block ${offset <= 0 ? 'left-[150px]' : 'right-[150px]'}`}
@@ -197,7 +217,9 @@ export function PathScreen({ storedData, midiState, onStartPractice, onPlayAlong
                               <div
                                 role="dialog"
                                 aria-label={objective.label}
-                                className={`mb-pop absolute top-[88px] left-1/2 z-20 w-80 -translate-x-1/2 rounded-[18px] p-4 ${
+                                className={`mb-pop absolute top-[88px] left-1/2 z-20 w-80 -translate-x-1/2 rounded-[18px] p-4 sm:top-1/2 sm:-translate-y-1/2 sm:translate-x-0 ${
+                                  offset <= 0 ? 'sm:left-[96px]' : 'sm:right-[96px] sm:left-auto'
+                                } ${
                                   state === 'locked'
                                     ? 'border-2 border-line bg-surface text-text'
                                     : state === 'current'

@@ -56,6 +56,8 @@ import { Mascot, MascotMood } from '../components/Mascot';
 import { VirtualKeyboard } from '../components/VirtualKeyboard';
 
 interface PlayScreenProps {
+  /** Admin profile: every step of every song is open. */
+  unlockAll?: boolean;
   settings: AppSettings;
   onUpdateSettings: (patch: Partial<AppSettings>) => void;
   songProgress: Record<string, SongProgress>;
@@ -95,6 +97,7 @@ function buildQueueFromConfig(config: PracticeConfig): PracticeQueueItem[] {
 }
 
 export function PlayScreen({
+  unlockAll = false,
   settings,
   onUpdateSettings,
   songProgress,
@@ -704,7 +707,7 @@ export function PlayScreen({
   };
 
   const handleSwitchStepInProgression = (stepId: VoicingStep) => {
-    if (activeSong && !isStepUnlockedForSong(activeSong, stepId, songProgress)) {
+    if (!unlockAll && activeSong && !isStepUnlockedForSong(activeSong, stepId, songProgress)) {
       return;
     }
     setProgressionStepOverride(stepId);
@@ -768,6 +771,7 @@ export function PlayScreen({
     return (
       <div className="space-y-6">
         <SessionConfigPanel
+          unlockAll={unlockAll}
           initialMode={configModeTab}
           initialSessionConfig={
             activeConfig.mode === 'session' ? activeConfig : DEFAULT_SESSION_CONFIG
@@ -916,9 +920,8 @@ export function PlayScreen({
               <div className="flex flex-wrap items-center justify-center gap-1.5">
                 {visibleLadderSteps.map((stepId) => {
                   const isSelected = progressionStepOverride === stepId;
-                  const isUnlocked = activeSong
-                    ? isStepUnlockedForSong(activeSong, stepId, songProgress)
-                    : true;
+                  const isUnlocked =
+                    unlockAll || !activeSong || isStepUnlockedForSong(activeSong, stepId, songProgress);
                   const label = activeSong
                     ? getSongStepShortLabel(activeSong, stepId)
                     : VOICING_STEPS[stepId].shortLabelFr;

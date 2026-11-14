@@ -69,49 +69,61 @@ export function ChordDiscovery(props: ChordDiscoveryProps) {
     }
   }, [isFound, item, found]);
 
+  // Hands-free: once a chord is found, move on to the next one by itself.
+  const itemId = item?.chord.id;
+  useEffect(() => {
+    if (!isFound || selected >= chords.length - 1) return;
+    const timer = window.setTimeout(() => setSelected((i) => (i === selected ? i + 1 : i)), 1300);
+    return () => window.clearTimeout(timer);
+  }, [isFound, itemId, selected, chords.length]);
+
   if (!item) return null;
   const name = formatChartChord(item, notation);
   const allTried = chords.every((c) => found.has(c.chord.id));
 
   return (
-    <div className="mb-enter w-full max-w-3xl">
+    <div className="mb-enter flex h-full w-full max-w-4xl flex-col gap-3">
       <div className="flex items-end gap-3">
-        <Mascot size={88} mood={isFound ? 'happy' : 'listen'} className="shrink-0" />
-        <div className="mb-6 rounded-2xl border-2 border-line bg-surface px-4 py-3">
-          <p className="font-display text-lg font-semibold">{intro.title}</p>
-          <p className="mt-1 font-semibold">{intro.explanation}</p>
-          <p className="mt-2 text-sm font-bold text-muted">{intro.howTo}</p>
-          {props.hint && <p className="mt-2 text-sm font-bold text-sky-press dark:text-sky">{props.hint}</p>}
+        <Mascot size={64} mood={isFound ? 'happy' : 'listen'} className="hidden shrink-0 sm:block" />
+        <div className="min-w-0 flex-1 rounded-2xl border-2 border-line bg-surface px-4 py-2.5">
+          <p className="font-display text-base font-semibold">
+            {intro.title} <span className="font-sans text-sm font-bold text-muted">· {intro.howTo}</span>
+          </p>
+          <p className="mt-0.5 text-sm font-semibold">{intro.explanation}</p>
+          {props.hint && <p className="mt-0.5 text-sm font-bold text-sky-press dark:text-sky">{props.hint}</p>}
         </div>
       </div>
 
-      <p className="text-sm font-bold text-muted">
-        Prenez votre temps : rien n’est chronométré ni noté. Voici les {chords.length} accord{chords.length > 1 ? 's' : ''} du
-        morceau.
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2" role="tablist" aria-label="Accords du morceau">
-        {chords.map((c, i) => {
-          const active = i === selected;
-          const ok = found.has(c.chord.id);
-          return (
-            <button
-              key={c.chord.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setSelected(i)}
-              className={`mb-btn mb-btn-sm ${active ? 'mb-btn-sky' : 'mb-btn-ghost'}`}
-            >
-              {ok && <Check className="h-4 w-4" strokeWidth={3} aria-label="essayé" />}
-              {formatChartChord(c, notation)}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Accords du morceau">
+          {chords.map((c, i) => {
+            const active = i === selected;
+            const ok = found.has(c.chord.id);
+            return (
+              <button
+                key={c.chord.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setSelected(i)}
+                className={`mb-btn mb-btn-sm ${active ? 'mb-btn-sky' : 'mb-btn-ghost'}`}
+              >
+                {ok && <Check className="h-4 w-4" strokeWidth={3} aria-label="essayé" />}
+                {formatChartChord(c, notation)}
+              </button>
+            );
+          })}
+        </div>
+        <span className="ml-auto text-sm font-bold text-muted">
+          {allTried
+            ? 'Tous les accords sont trouvés.'
+            : `Rien n’est noté · ${found.size}/${chords.length} essayés, ce n’est pas obligatoire`}
+        </span>
       </div>
 
-      <div className="mt-5 rounded-3xl border-2 border-line bg-surface p-5">
-        <div className="flex flex-wrap items-center gap-4">
-          <p className="font-display text-5xl font-bold" data-testid="discovery-chord">
+      <div className="flex min-h-0 flex-1 flex-col justify-center rounded-3xl border-2 border-line bg-surface p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="font-display text-5xl leading-none font-bold" data-testid="discovery-chord">
             {name}
           </p>
           <button
@@ -121,38 +133,38 @@ export function ChordDiscovery(props: ChordDiscoveryProps) {
           >
             <Volume2 className="h-4 w-4" /> Écouter
           </button>
+          <ul className="flex flex-wrap gap-2" aria-label="Notes à jouer">
+            {intervals.map((interval) => {
+              const pc = (item.chord.root + interval) % 12;
+              const held = playedPcs.has(pc);
+              const isNew = fresh.has(interval) && step !== 'root';
+              return (
+                <li
+                  key={interval}
+                  className={`rounded-xl border-2 px-3 py-1 text-center transition-colors ${
+                    held ? 'border-green bg-green/10' : isNew ? 'border-brass bg-brass/10' : 'border-line'
+                  }`}
+                >
+                  <span className="block font-display text-xl leading-tight font-bold">{formatPitchClass(pc, notation)}</span>
+                  <span className="block text-[11px] font-bold text-muted">
+                    {intervalNameFr(interval)}
+                    {isNew && <span className="ml-1 rounded bg-brass px-1 text-ink">nouveau</span>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
           <span
             className={`ml-auto rounded-full px-3 py-1 text-sm font-bold ${isFound ? 'bg-green text-white' : 'bg-mist text-muted'}`}
             aria-live="polite"
           >
-            {isFound ? 'C’est ça !' : 'À vous d’essayer'}
+            {isFound ? (selected < chords.length - 1 ? 'C’est ça ! Accord suivant…' : 'C’est ça !') : 'À vous d’essayer'}
           </span>
         </div>
 
-        <ul className="mt-4 flex flex-wrap gap-2" aria-label="Notes à jouer">
-          {intervals.map((interval) => {
-            const pc = (item.chord.root + interval) % 12;
-            const held = playedPcs.has(pc);
-            const isNew = fresh.has(interval) && step !== 'root';
-            return (
-              <li
-                key={interval}
-                className={`rounded-2xl border-2 px-4 py-2 text-center transition-colors ${
-                  held ? 'border-green bg-green/10' : isNew ? 'border-brass bg-brass/10' : 'border-line'
-                }`}
-              >
-                <span className="block font-display text-2xl font-bold">{formatPitchClass(pc, notation)}</span>
-                <span className="block text-xs font-bold text-muted">
-                  {intervalNameFr(interval)}
-                  {isNew && <span className="ml-1 rounded bg-brass px-1 text-ink">nouveau</span>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="mt-5">
+        <div className="mt-4">
           <VirtualKeyboard
+            compact
             isOpen
             onToggleOpen={() => undefined}
             showExpectedHelper
@@ -168,21 +180,9 @@ export function ChordDiscovery(props: ChordDiscoveryProps) {
             onReleaseNote={props.onReleaseVirtualNote}
             onToggleLatchNote={props.onToggleLatchNote}
             onReleaseAllVirtual={props.onClearVirtualLatchNotes}
-            onPlayPreview={() => pianoSynth.playChordPreview(voicing, 1200)}
             hasLatchedNotes={props.virtualLatchNotes.length > 0}
           />
         </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        {selected < chords.length - 1 && (
-          <button type="button" onClick={() => setSelected((i) => i + 1)} className="mb-btn mb-btn-ghost">
-            Accord suivant
-          </button>
-        )}
-        <span className="text-sm font-bold text-muted">
-          {allTried ? 'Tous les accords sont trouvés.' : `${found.size}/${chords.length} essayés : ce n’est pas obligatoire.`}
-        </span>
       </div>
     </div>
   );

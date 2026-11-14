@@ -115,9 +115,20 @@ export const SONG_PATH: PathUnit[] = [
     title: 'Premiers sons',
     goal: 'Trouver ses repères sur le clavier avec des morceaux à très peu d’accords.',
     songs: [
-      song('so-what', 'So What', 'Deux accords à un demi-ton l’un de l’autre : premières touches noires.', ['Touches noires', 'Demi-ton', 'Accord m7'], 'Deux accords mineurs : écoutez la tierce mineure.'),
+      // So What est retiré pour l'instant : dans l'enregistrement, les accords
+      // tombent avant le premier temps (anticipations), une notion à enseigner
+      // plus tard. À remettre avec une leçon dédiée.
+      // song('so-what', 'So What', 'Deux accords à un demi-ton l’un de l’autre : premières touches noires.', ['Touches noires', 'Demi-ton', 'Accord m7'], 'Deux accords mineurs : écoutez la tierce mineure.'),
       song('cantaloupe-island', 'Cantaloupe Island', 'Trois accords, un groove lent : la couleur m7 contre la couleur 7.', ['Accord 7 (dominante)', 'Changer d’accord en rythme']),
       song('maiden-voyage', 'Maiden Voyage', 'Des accords suspendus qui flottent : tenir et poser.', ['Accords sus4']),
+    ],
+  },
+  {
+    id: 'latin-groove',
+    title: 'Le groove latin',
+    goal: 'Un groove latin lent et une grille de 24 mesures : suivre une vraie forme AAB.',
+    songs: [
+      song('song-for-my-father', 'Song For My Father', 'Groove latin, cinq accords, un sus.', ['Groove latin', 'Forme AAB']),
     ],
   },
   {
@@ -132,10 +143,9 @@ export const SONG_PATH: PathUnit[] = [
   },
   {
     id: 'latin-minor',
-    title: 'Couleurs latines et mineures',
-    goal: 'Grooves latins, tonalités mineures et accord demi-diminué.',
+    title: 'Couleurs mineures',
+    goal: 'Tonalités mineures, accord demi-diminué et valse.',
     songs: [
-      song('song-for-my-father', 'Song For My Father', 'Groove latin, cinq accords, un sus.', ['Groove latin']),
       song('blue-bossa', 'Blue Bossa', 'II-V mineur et modulation en ré bémol.', ['m7♭5', 'II-V mineur', 'Modulation']),
       song('footprints', 'Footprints', 'Une valse mineure aux accords altérés.', ['Mesure à 3 temps', 'Accords altérés']),
     ],

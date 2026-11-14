@@ -495,6 +495,7 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
       <main key={activeTab} className="mb-enter px-4 pt-6 pb-28 sm:px-8 lg:ml-60 lg:pt-10 lg:pb-12">
         {activeTab === 'today' && (
           <PathScreen
+            unlockAll={profile.admin === true}
             storedData={storedData}
             midiState={midiState}
             onStartPractice={handleStartPractice}
@@ -516,6 +517,7 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
 
         {activeTab === 'play' && (
           <PlayScreen
+            unlockAll={profile.admin === true}
             key={playSessionKey}
             settings={storedData.settings}
             onUpdateSettings={handleUpdateSettings}
@@ -537,6 +539,7 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
 
         {activeTab === 'progress' && (
           <ProgressScreen
+            unlockAll={profile.admin === true}
             storedData={storedData}
             onStartPractice={handleStartPractice}
           />
@@ -574,6 +577,7 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
         }}
         onSelectMidiDevice={(id) => midiControllerRef.current?.selectDevice(id)}
         subscribeMidiRaw={subscribeMidiRaw}
+        activeNotes={activeNotes}
         isDemoData={storedData.isDemoData}
         onRestoreDemoData={() =>
           setStoredData((prev) => ({

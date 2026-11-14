@@ -1,7 +1,5 @@
-import MidiAudioPlayer from 'midi-audio-player';
+import { BandSequencer } from './bandSequencer';
 import {
-  DRUM_CHANNEL,
-  DRUM_KIT_PRESET,
   MidiAnalysis,
   analyzeMidi,
   describeTracks,
@@ -9,7 +7,6 @@ import {
   setMidiTempo,
   truncateMidiToBars,
 } from './midiFile';
-import { installJazzKit } from './jazzKit';
 
 export interface BackingOptions {
   /** Playback tempo; the file is rewritten so the band really plays at this speed. */
@@ -18,6 +15,13 @@ export interface BackingOptions {
   pianoGuideVolume: number;
   /** Play only this many bars from the start (count-in included); the rest is cut. */
   bars?: number;
+  /** Sound chosen per MIDI channel (0–15), ids of the sound library. */
+  sounds?: Record<number, string>;
+  /**
+   * Bar (0-based) where a metronome clicks every beat: the bar before the
+   * learner comes in. The file's own count-in clicks are then muted.
+   */
+  metronomeBar?: number;
 }
 
 /**
@@ -26,20 +30,13 @@ export interface BackingOptions {
  * `performance.now()` — the same clock as Web MIDI timestamps.
  */
 export class BackingTrack {
-  private readonly player: MidiAudioPlayer;
-  private durationS = 0;
+  private readonly band = new BandSequencer();
   private anchors: number[] = [];
   private startedAt: number | null = null;
   analysis: MidiAnalysis | null = null;
 
-  /** Must be called from a user gesture so the browser allows audio. */
-  constructor() {
-    this.player = new MidiAudioPlayer({ volume: 0.85, reverb: 0.14, preferred: ['FluidR3_GM'] });
-    installJazzKit(this.player);
-    this.player.on('computed', (data) => {
-      this.durationS = data.duration;
-    });
-  }
+  /** Must be called from a user gesture (or after one) so the browser allows audio. */
+  constructor() {}
 
   async load(original: ArrayBuffer, opts: BackingOptions): Promise<MidiAnalysis> {
     const analysis = analyzeMidi(original);
@@ -48,40 +45,47 @@ export class BackingTrack {
     if (Math.abs(analysis.bpm - opts.bpm) > 0.01) buffer = setMidiTempo(buffer, opts.bpm);
     if (opts.bars !== undefined && opts.bars < analysis.totalBars) buffer = truncateMidiToBars(buffer, opts.bars);
 
-    const presets: Record<string, string> = {};
-    if (tracks.some((t) => t.channel === DRUM_CHANNEL)) presets[String(DRUM_CHANNEL)] = DRUM_KIT_PRESET;
-    await this.player.load(buffer, { presets, volumes: {} });
+    await this.band.load(buffer, opts.sounds);
+    const beatS = 60 / opts.bpm;
+    this.band.setClicks(
+      opts.metronomeBar === undefined
+        ? []
+        : Array.from({ length: analysis.beatsPerBar }, (_, b) => ({
+            time: (opts.metronomeBar! * analysis.beatsPerBar + b) * beatS,
+            accent: b === 0,
+          })),
+    );
+    // Channels here are 1–16 (describeTracks), the sequencer counts 0–15.
     for (const track of tracks) {
       const isPiano = analysis.pianoChannels.includes(track.channel);
       const isClick = track.name.trim().toLowerCase() === 'click';
-      this.player.setChannelVolume(track.channel, isPiano ? opts.pianoGuideVolume : isClick ? 0.9 : 0.85);
+      const clickVolume = opts.metronomeBar === undefined ? 0.9 : 0;
+      this.band.setChannelVolume(track.channel - 1, isPiano ? opts.pianoGuideVolume : isClick ? clickVolume : 0.85);
     }
     this.analysis = { ...analysis, bpm: opts.bpm };
     return this.analysis;
   }
 
   setPianoGuideVolume(volume: number): void {
-    this.analysis?.pianoChannels.forEach((ch) => this.player.setChannelVolume(ch, volume));
+    this.analysis?.pianoChannels.forEach((ch) => this.band.setChannelVolume(ch - 1, volume));
   }
 
   async start(): Promise<boolean> {
     this.anchors = [];
-    const ok = await this.player.play();
+    const ok = await this.band.start();
     this.startedAt = performance.now();
     return ok;
   }
 
   async stop(): Promise<void> {
     this.startedAt = null;
-    await this.player.stop().catch(() => undefined);
+    this.band.stop();
   }
 
-  /** Player position in ms, from its own (audio-clock based) remaining time. */
+  /** Position in the file (ms) on the audio clock: every note is scheduled on it. */
   private playerPositionMs(): number | null {
-    if (!this.durationS) return null;
-    const remaining = this.player.getSongTimeRemaining();
-    if (!Number.isFinite(remaining)) return null;
-    return Math.max(0, (this.durationS - remaining) * 1000);
+    const s = this.band.positionS();
+    return s === null ? null : s * 1000;
   }
 
   /**
@@ -113,6 +117,6 @@ export class BackingTrack {
   /** Stops and releases the audio context (call when leaving the screen). */
   async dispose(): Promise<void> {
     await this.stop();
-    await this.player.close().catch(() => undefined);
+    await this.band.close();
   }
 }

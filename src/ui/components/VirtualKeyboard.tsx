@@ -20,6 +20,8 @@ interface VirtualKeyboardProps {
   onReleaseAllVirtual: () => void;
   onPlayPreview?: () => void;
   hasLatchedNotes: boolean;
+  /** Shorter keys and no option pills: for screens that must fit without scrolling. */
+  compact?: boolean;
 }
 
 interface PianoKeySpec {
@@ -73,6 +75,7 @@ export function VirtualKeyboard({
   onReleaseAllVirtual,
   onPlayPreview,
   hasLatchedNotes,
+  compact = false,
 }: VirtualKeyboardProps) {
   const activeMidiSet = new Set(activeNotes);
   const expectedSet = new Set(expectedPitchClasses);
@@ -101,7 +104,7 @@ export function VirtualKeyboard({
     <section aria-label="Clavier" className="w-full">
       {isOpen && (
         <div className="overflow-x-auto pb-2">
-          <div className="relative mx-auto h-48 min-w-[600px] max-w-4xl select-none rounded-[22px] bg-ink p-2.5 pt-4 shadow-[0_6px_0_#0c0f1f] sm:h-52">
+          <div className={`relative mx-auto ${compact ? 'h-36 sm:h-40' : 'h-48 sm:h-52'} min-w-[600px] max-w-4xl select-none rounded-[22px] bg-ink p-2.5 pt-4 shadow-[0_6px_0_#0c0f1f]`}>
             {/* White keys */}
             <div className="grid h-full grid-cols-14 gap-[3px]">
               {WHITE_KEYS.map((key) => {
@@ -200,7 +203,7 @@ export function VirtualKeyboard({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+      {!compact && <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
         <button type="button" onClick={onToggleOpen} className={pillClass(false)}>
           {isOpen ? (
             <span className="inline-flex items-center gap-1"><ChevronDown className="h-4 w-4" />Masquer le clavier</span>
@@ -234,7 +237,7 @@ export function VirtualKeyboard({
             )}
           </>
         )}
-      </div>
+      </div>}
     </section>
   );
 }

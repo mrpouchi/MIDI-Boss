@@ -8,8 +8,8 @@ import MidiAudioPlayer from 'midi-audio-player';
  * conversion has catch-all zones that override kick, snare and hi-hat.
  */
 export const JAZZ_KIT_ID = 'midiboss_jazz_kit';
-const BASE_KIT = '1289_FluidR3';
-const RIDE_SOURCE = '1284_GeneralUserGS';
+export const BASE_KIT = '1289_FluidR3';
+export const RIDE_SOURCE = '1284_GeneralUserGS';
 const RIDE_KEY = 51;
 /**
  * Keys that all play the same ride sample. The player cuts a voice when the
@@ -37,8 +37,19 @@ const isOnlyKey = (z: Zone, key: number) => z.keyRangeLow === key && z.keyRangeH
  * sample, each copy re-centred so it sounds at its original pitch.
  */
 export function buildJazzKit(base: Preset, rideSource: Preset): Preset {
-  const ride = rideSource.zones.find((z) => isOnlyKey(z, RIDE_KEY));
-  if (!ride) return { ...base, id: JAZZ_KIT_ID };
+  return withRideVoices(base, rideSource, JAZZ_KIT_ID);
+}
+
+/**
+ * Any kit, with the ride of `rideSource` (the kit itself by default) on every
+ * ride voice key. Uses the dedicated key-51 zone, or else the last zone that
+ * covers key 51 (the one the player would pick).
+ */
+export function withRideVoices(base: Preset, rideSource: Preset = base, id: string = base.id): Preset {
+  const ride =
+    rideSource.zones.find((z) => isOnlyKey(z, RIDE_KEY)) ??
+    [...rideSource.zones].reverse().find((z) => z.keyRangeLow <= RIDE_KEY && RIDE_KEY <= z.keyRangeHigh);
+  if (!ride) return { ...base, id };
   const fine = typeof ride.originalPitch === 'number' ? ride.originalPitch - RIDE_KEY * 100 : 0;
   const voices = RIDE_VOICE_KEYS.map((key) => ({
     ...ride,
@@ -48,7 +59,7 @@ export function buildJazzKit(base: Preset, rideSource: Preset): Preset {
   }));
   // The player picks the LAST zone covering a key, so the ride voices go at the end.
   const zones = [...base.zones.filter((z) => !RIDE_VOICE_KEYS.some((key) => isOnlyKey(z, key))), ...voices];
-  return { ...base, id: JAZZ_KIT_ID, zones };
+  return { ...base, id, zones };
 }
 
 /** The two (public) catalog lookups of the player, seen loosely so they can be wrapped. */

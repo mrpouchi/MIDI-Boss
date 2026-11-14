@@ -1,5 +1,7 @@
 import { RefreshCw, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { KeyboardVolume } from './KeyboardVolume';
+import { GestureChordSetting } from './GestureChordSetting';
+import { useCallback, useEffect, useState } from 'react';
 import { INSTRUMENTS, pianoSynth } from '../../audio/synth';
 import { MidiRawListener } from '../../input/midi';
 import { MidiState } from '../../input/types';
@@ -18,6 +20,8 @@ interface SettingsDrawerProps {
   isDemoData: boolean;
   onRestoreDemoData: () => void;
   onClearAllData: () => void;
+  /** Notes held right now (to record the "Suivant" chord). */
+  activeNotes: number[];
 }
 
 export function SettingsDrawer({
@@ -32,7 +36,12 @@ export function SettingsDrawer({
   isDemoData,
   onRestoreDemoData,
   onClearAllData,
+  activeNotes,
 }: SettingsDrawerProps) {
+  const setGestureChord = useCallback(
+    (gestureChord: number[] | undefined) => onUpdateSettings({ gestureChord }),
+    [onUpdateSettings],
+  );
   const [confirmReset, setConfirmReset] = useState(false);
   const [instrumentStatus, setInstrumentStatus] = useState(() =>
     pianoSynth.getInstrumentStatus(),
@@ -182,26 +191,18 @@ export function SettingsDrawer({
             </label>
 
             {settings.audioEnabled && (
-              <div>
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span>Volume sonore</span>
-                  <span className="font-mono-tabular">
-                    {Math.round(settings.audioVolume * 100)} %
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0.1}
-                  max={1}
-                  step={0.05}
-                  value={settings.audioVolume}
-                  onChange={(e) =>
-                    onUpdateSettings({ audioVolume: Number(e.target.value) })
-                  }
-                  className="mt-2 w-full accent-sky"
-                />
-              </div>
+              <KeyboardVolume
+                value={settings.audioVolume}
+                onChange={(audioVolume) => onUpdateSettings({ audioVolume })}
+              />
             )}
+
+            <GestureChordSetting
+              value={settings.gestureChord}
+              onChange={setGestureChord}
+              activeNotes={activeNotes}
+              notation={settings.notation}
+            />
 
             {settings.audioEnabled && (
               <div>
@@ -231,7 +232,7 @@ export function SettingsDrawer({
                   ))}
                 </select>
                 <p className="mt-1.5 text-[11px] text-muted">
-                  Sons échantillonnés chargés à la demande (MIDI.js MusyngKite).
+                  Grand piano : Splendid Grand Piano, échantillonné à plusieurs nuances (20 Mo, téléchargés une fois puis gardés par le navigateur). Autres sons : MIDI.js MusyngKite.
                   Le synthé de secours prend le relais pendant le chargement.
                 </p>
                 {latency && (

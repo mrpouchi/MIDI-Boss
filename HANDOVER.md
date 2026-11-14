@@ -370,6 +370,99 @@ Important : ne pas augmenter la version sans prévoir une migration ; le chargeu
 - Avant d’ajouter une dépendance, vérifier qu’une dépendance déjà installée ne couvre pas le besoin et vérifier licence, taille, compatibilité Vite/browser.
 - Ne pas réinitialiser le worktree ni supprimer les changements non commit.
 
+## Volume du clavier jusqu’à 300 % (14 novembre 2026)
+
+- `pianoSynth.setVolume` accepte 0,1 à `MAX_AUDIO_VOLUME` (3 = 300 %). 100 % garde l’ancien niveau (gain maître 0,45).
+- Un `DynamicsCompressorNode` (seuil −3 dB, ratio 20) sert de limiteur après le gain maître : transparent aux volumes normaux, il évite la saturation quand on booste.
+- Composant `KeyboardVolume` : dans les réglages, et en version compacte dans l’en-tête de l’écran « avec l’orchestre » (visible pendant le morceau). Double-clic sur le curseur : retour à 100 %.
+- `local-songs/` contient maintenant 15 exports iReal (tout le parcours sauf Mr. P.C.).
+
+## Orchestre sans les mains, sur un seul écran (14 novembre 2026)
+
+Règle produit : une fois « Jouer » cliqué, la séance tient sur un écran sans défilement et se pilote depuis l’instrument.
+
+- **Accord « Suivant »** (`settings.gestureChord`, classes de hauteur) : joué 3 fois d’affilée, vite (≤ 900 ms entre deux frappes, aucune autre note entre), il passe à la page suivante, une à la fois : découverte → réglages → morceau, et résultats → réglages. Désactivé pendant le morceau. Logique pure dans `src/input/chordGesture.ts` (testée), branchement React dans `useChordGesture`. On le choisit dans les Réglages ou via la pastille « Suivant » de l’en-tête (cliquer, jouer l’accord, relâcher ; au moins 2 notes différentes).
+- **Découverte** : passe seule à l’accord suivant 1,3 s après qu’il est trouvé ; « Je suis prêt » (bouton ou geste) ouvre toujours les réglages avant le morceau. Après un « Suivant », le geste est ignoré tant que l’accord n’a pas reposé 1,5 s : le marteler 6 fois n’avance que d’une page.
+- Le fond de page (`body`) ne défile pas tant que l’écran « avec l’orchestre » est ouvert.
+- **Rejouer** relance directement avec les mêmes réglages.
+- Mise en page : `main` en `min-h-0 flex-1`, clavier virtuel `compact` (plus court, sans pastilles d’options), réglages en deux colonnes, grille complète retirée des réglages (déjà vue en découverte). Vérifié à 1190×700 : aucun défilement dans les 4 phases.
+- Le démarrage audio sans clic repose sur l’activation persistante du navigateur (le clic sur « Jouer » de la carte) : OK dans Chromium/Brave.
+
+## Cantaloupe Island : cloches sur la piste Harmony (14 novembre 2026)
+
+- Les styles funk/rock d’iReal remplissent la piste « Harmony » (vide en jazz) avec des accords tenus, programme 14 = cloches tubulaires en GM : un « clang » métallique à chaque mesure. Batterie de ce fichier : touches GM standard (36, 40, 42, 46, 57), programme 1 sur le canal 10, rien d’anormal.
+- `prepareDrumMapping` remplace le programme 14 par 4 (piano électrique) via `IREAL_PROGRAM_TO_GM` (hypothèse : on ne connaît pas l’instrument iReal d’origine).
+- `analyzeMidi.pianoChannels` inclut maintenant la piste Harmony : elle joue les accords, donc elle fait partie du guide, muette par défaut avec l’orchestre.
+
+## Arrangements qui ne viennent pas d’iReal (14 novembre 2026)
+
+- Cantaloupe Island est maintenant un arrangement MuseScore (« Arranged by Bradley Herrin ») : saxophones, piano, contrebasse, batterie, 4 mesures d’intro puis 2 tours de la grille, 114 BPM, sans piste de décompte.
+- `alignFormStart(buffer, chartBarRoots(chart))` trouve où commence la grille en comparant la basse (piste la plus grave, note du premier temps) aux fondamentales de la grille (≥ 60 % de mesures concordantes). L’écran « avec l’orchestre » l’utilise pour tout fichier non iReal ; pour iReal, le décompte reste `firstMusicBar`. Pendant une intro de plus d’une mesure : « Intro : écoutez, la grille arrive ».
+- `trackLabel` et `describeTracks` retirent les caractères de contrôle : MuseScore termine les noms par un octet NUL (« Piano\u0000 »), ce qui empêchait de reconnaître le piano à couper.
+- `MidiAnalysis.iReal` indique un export iReal.
+- So What est maintenant « Miles Davis - So What » (MuseScore, 130 BPM, 157 mesures, pistes sans nom). Piano reconnu par son programme GM 0–7 quand la piste n'a pas de nom. La grille commence à la mesure 0 : `prependCountIn` ajoute une mesure de décompte (coup de baguette, touche 37) devant les fichiers qui démarrent directement. `alignedChoruses` limite les « Tours de grille » proposés aux tours où la basse suit la grille (ici 1 : ensuite la contrebasse joue le thème, et la forme se décale vers la mesure 89). L'export iReal de So What reste dans `~/Documents/eph`.
+
+## Parcours : bulles au survol (14 novembre 2026)
+
+- Les bulles des objectifs s'ouvrent au survol de la pastille (fermeture après 250 ms, pour pouvoir glisser jusqu'à la bulle). Le clic ouvre aussi (écrans tactiles). Plus aucune bulle n'est ouverte d'office.
+- La bulle s'affiche à côté de la pastille (du côté opposé au zigzag), et non plus dessous, où elle cachait la pastille suivante. Sur mobile, elle reste dessous.
+
+## So What retiré du parcours (14 novembre 2026)
+
+- Demande de l'utilisateur : dans l'enregistrement, les accords tombent avant le premier temps (anticipations), une notion à enseigner plus tard. So What est donc commenté dans `SONG_PATH` (« Premiers sons » commence par Cantaloupe Island), et son MIDI est retiré de `local-songs/` (gardé dans `~/Documents/eph/midi`). À remettre avec une leçon sur les anticipations.
+- Les tests du parcours utilisent maintenant Cantaloupe Island comme premier morceau.
+
+## Song For My Father, deuxième section (14 novembre 2026)
+
+- MIDI « Horace Silver - Song For My Father » (MuseScore, 125 BPM) : trompette, ténor, piano à 2 mains, basse, batterie. L'export iReal reste dans `~/Documents/eph`.
+- Le fichier commence par une anacrouse (1/4 puis 4/4). `normalizePickup` (appliqué au chargement de l'écran orchestre) ajoute un silence pour qu'elle devienne le 4ᵉ temps d'une mesure complète ; sans ça, toutes les mesures étaient décalées d'un temps.
+- Alignement : intro de 4 mesures, la grille iReal (24 mesures, AAB) commence à la mesure 5. Seul le premier tour est proposé : dans les solos, l'arrangement remplace la section B par une A. `alignedChoruses` demande désormais 85 % de mesures concordantes (au lieu de 60 %).
+- **Son en avance (corrigé)** : midi-audio-player supprime le silence avant la première note (`#trimMidiEvents`), alors que l'écran convertit la position du lecteur en temps du fichier. Avec l'anacrouse rembourrée, la première note tombait 3,5 temps après le début : la musique précédait les accords affichés d'environ 1,7 s. `anchorStart` (appelé dans `BackingTrack.load`) ajoute un coup de charleston inaudible (vélocité 1) au tick 0 quand la première note est plus tardive. À garder en tête pour tout fichier qui commence par un silence.
+- Parcours : nouvelle section 2 « Le groove latin » avec Song For My Father ; l'ancienne section « Couleurs latines et mineures » devient « Couleurs mineures » (Blue Bossa, Footprints).
+
+## Profil admin (14 novembre 2026)
+
+- `Profile.admin` (case « Admin (rien de bloqué) » dans « Gérer les profils », `setAdmin`). Badge « Admin : tout débloqué » sur la carte, « Admin · changer de profil » dans la barre latérale.
+- Sur ce profil, rien n'est verrouillé : `buildSongPath(units, runs, unlockAll)` ouvre tous les morceaux et objectifs (les objectifs validés restent validés, le marqueur « À vous » reste sur le premier non validé), et les étapes de PlayScreen / SessionConfigPanel sont toutes ouvertes (`unlockAll`).
+- La progression enregistrée ne change pas : désactiver l'admin rétablit les verrous selon les vrais résultats.
+
+## Orchestre : la grille entière pendant le morceau (14 novembre 2026)
+
+- Pendant le morceau, l'écran montre toute la grille (4 mesures par ligne, 8 au-delà de 32 mesures), dont les lignes se partagent la hauteur disponible : pas de défilement. Le gros accord central et « Ensuite : … » sont retirés.
+- La mesure en cours est mise en évidence dans la grille (cadre bleu, temps qui avancent en bas) ; sur une mesure « % », elle affiche le nom de l'accord à rejouer. Les accords joués prennent la couleur du résultat (à l'heure, anticipé, en retard, manqué).
+- Une ligne d'état au-dessus : intro ou décompte (le chiffre des 4 derniers temps), « Mesure x/N », le dernier verdict et les pourcentages.
+
+## Grand piano (14 novembre 2026)
+
+- L'instrument « piano » utilise le Splendid Grand Piano de `smplr` (`SplendidGrandPiano`, échantillons sur smpldsnds.github.io, plusieurs couches de vélocité de PP à FF) au lieu du soundfont MusyngKite « acoustic_grand_piano », jugé trop artificiel.
+- 226 fichiers, environ 20 Mo, mis en cache par le navigateur (`CacheStorage('midiboss-samples')`) : téléchargés une fois. Les autres instruments (Rhodes, vibraphone, orgue) restent sur MusyngKite et utilisent le même cache.
+- Pendant le premier chargement, le synthé de secours joue.
+
+## Orchestre : séquenceur sur l'horloge audio (14 novembre 2026)
+
+- Tempo irrégulier : midi-audio-player joue chaque note « maintenant » depuis une boucle `setTimeout`, donc en retard d'une quantité variable. Mesure sur Song For My Father, avec une page chargée (50 ms de calcul toutes les 200 ms) : 6,5 ms d'écart moyen à la grille, jusqu'à 10,7 ms ; avec le nouveau séquenceur : 0,0 ms.
+- `src/audio/bandSequencer.ts` : `buildNoteSchedule` (pur, testé) calcule l'heure exacte de chaque note en secondes (carte des tempos), et `BandSequencer` programme les notes 300 ms à l'avance sur l'horloge de l'AudioContext (`webaudiofontplayer.queueWaveTable(when, …)`). Batterie en coups uniques, une note en retard de plus de 80 ms est sautée plutôt que jouée en rafale.
+- `src/audio/presets.ts` : sons FluidR3 chargés par numéro de programme (`0320_FluidR3` = contrebasse), kit jazz construit depuis `1289_FluidR3` + ride `1284_GeneralUserGS`, cache du navigateur `midiboss-presets`.
+- `BackingTrack` garde la même interface mais utilise ce séquenceur ; plus de rognage du silence initial (`anchorStart` n'est plus appelé). Le lecteur MIDI de la bibliothèque utilise toujours midi-audio-player (pas besoin d'un tempo exact pour écouter).
+- Sons de l'orchestre (`src/audio/bandInstruments.ts`) : l'ancien lecteur jouait en fait la banque AirFont 380 (premier preset du catalogue pour chaque programme). L'utilisateur n'a pas aimé FluidR3, d'où :
+  - contrebasse (programme 32) : Smolken Double Bass pizzicato (smplr) ;
+  - saxophones (64–67) : VCSL Tenor Saxophone - Vibrato (smplr, domaine public) ;
+  - piano (0–2, partie guide) : Splendid Grand Piano ;
+  - le reste (trompette, clic…) : AirFont 380, puis FluidR3 en secours ; batterie : kit jazz.
+- Les instruments smplr sortent 16 à 17 dB plus fort que la banque General MIDI (mesure hors ligne, une note vélocité 90) : un gain `trim` (0,135 à 0,155) les ramène au même niveau. Timing toujours exact (mesure : 0,0 ms d'écart sur 122 sons).
+
+## Bibliothèque de sons, écoute et métronome (14 novembre 2026)
+
+- `src/audio/bandInstruments.ts` : `SOUND_LIBRARY` par famille (piano, contrebasse/basse, sax, trompette, cuivres, guitare, orgue, batterie, autre). Pour chaque famille, plusieurs sons :
+  - instruments échantillonnés smplr : Splendid, Smolken, VCSL ténor (vibrato / droit), CP-80, Wurlitzer, Pianet, MusyngKite ;
+  - banques WebAudioFont : AirFont 380, FluidR3, GeneralUser, FatBoy, JCLive, MerlinGrand, RealFont ;
+  - kits : jazz MIDI Boss, balais FluidR3 et AirFont, jazz AirFont, Arachno et GeneralUser, studio.
+  Chaque son smplr a un `trim` mesuré pour rester au niveau des banques (les mesures sont en commentaire). Tous les identifiants ont été vérifiés dans le catalogue.
+- Choix par morceau : `settings.bandSounds[songTitleKey][canal] = id`. L'écran de réglages de l'orchestre liste seulement les parties présentes (`listBandParts`, clics de décompte exclus), avec un menu et un bouton pour écouter chaque son (`auditionSound`). Le piano est marqué « (guide) ».
+- « Écouter le morceau » : un tour, orchestre complet (piano à 0,8), avec les sons choisis ; arrêté en quittant les réglages ou au lancement.
+- Métronome : `BackingOptions.metronomeBar` = la mesure avant l'entrée (`countInBars - 1`). Clics synthétisés sur l'horloge audio (`BandSequencer.setClicks`), premier temps aigu et plus fort. Les pistes « Click » du fichier sont alors coupées. Vérifié sur Song For My Father : 4 clics espacés de 0,8 s à 75 BPM, juste avant la mesure 1.
+- `withRideVoices` (jazzKit.ts) recopie le ride de n'importe quel kit sur les touches de rotation (51, 59, 90).
+
 ## Git et modifications non commit (PÉRIMÉ : ces fichiers sont commités dans 7fe9742)
 
 Dernier commit de base : `273b893 feat: initialize project structure and base UI`.

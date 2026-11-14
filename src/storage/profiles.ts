@@ -26,6 +26,8 @@ export interface Profile {
   lastUsedAt: string;
   /** SHA-256 of the optional 4-digit code (salted with the profile id). */
   pinHash?: string;
+  /** Admin profile: nothing is locked (songs, objectives, steps), to test or teach freely. */
+  admin?: boolean;
 }
 
 export interface ProfilesState {
@@ -170,3 +172,13 @@ export function deleteProfile(state: ProfilesState, id: string, store: KeyValueS
 }
 
 export { readJson as readStoredJson, writeJson as writeStoredJson, browserStore };
+
+/** Turns the admin mode of a profile on or off. */
+export function setAdmin(state: ProfilesState, id: string, admin: boolean, store: KeyValueStore | null = browserStore()): ProfilesState {
+  const next = {
+    ...state,
+    profiles: state.profiles.map((p) => (p.id === id ? { ...p, admin: admin || undefined } : p)),
+  };
+  saveProfiles(next, store);
+  return next;
+}

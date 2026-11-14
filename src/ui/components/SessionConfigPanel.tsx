@@ -22,6 +22,8 @@ import { PracticeConfig, PracticeMode, SessionConfig } from '../../practice/type
 import { SongProgress } from '../../storage/types';
 
 interface SessionConfigPanelProps {
+  /** Admin profile: every step is open. */
+  unlockAll?: boolean;
   initialMode: PracticeMode;
   initialSessionConfig: SessionConfig;
   notation: NotationSystem;
@@ -30,6 +32,7 @@ interface SessionConfigPanelProps {
 }
 
 export function SessionConfigPanel({
+  unlockAll = false,
   initialMode,
   initialSessionConfig,
   notation,
@@ -404,9 +407,8 @@ export function SessionConfigPanel({
  }`}
             >
               {visibleProgressionSteps.map((stepId) => {
-                const isUnlocked = selectedSong
-                  ? isStepUnlockedForSong(selectedSong, stepId, songProgress)
-                  : true;
+                const isUnlocked =
+                  unlockAll || !selectedSong || isStepUnlockedForSong(selectedSong, stepId, songProgress);
                 const active = progressionStep === stepId;
                 const label = selectedSong
                   ? getSongStepShortLabel(selectedSong, stepId)

@@ -133,7 +133,7 @@ export function TopNav({
             <ProfileAvatar profile={profile} size={36} />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-display font-semibold">{profile.name}</span>
-              <span className="block text-xs font-bold text-muted">Changer de profil</span>
+              <span className="block text-xs font-bold text-muted">{profile.admin ? "Admin · changer de profil" : "Changer de profil"}</span>
             </span>
           </button>
           <button

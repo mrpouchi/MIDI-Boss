@@ -8,6 +8,7 @@ import {
   createProfile,
   deleteProfile,
   isValidPin,
+  setAdmin,
   signIn,
 } from '../../storage/profiles';
 import { Mascot } from '../components/Mascot';
@@ -69,6 +70,9 @@ export function ProfileScreen({ state, onChange }: ProfileScreenProps) {
                       {profile.pinHash && <Lock className="h-4 w-4 shrink-0 text-muted" aria-label="Protégé par un code" />}
                     </span>
                     <span className="text-sm font-bold text-muted">{lastUsed(profile.lastUsedAt)}</span>
+                    {profile.admin && (
+                      <span className="rounded-full bg-brass px-2 py-0.5 text-xs font-extrabold text-ink">Admin : tout débloqué</span>
+                    )}
                   </button>
                   {managing && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-3xl bg-surface/95 p-3 text-center">
@@ -97,14 +101,25 @@ export function ProfileScreen({ state, onChange }: ProfileScreenProps) {
                           </div>
                         </>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDelete(profile.id)}
-                          className="mb-btn mb-btn-sm mb-btn-ghost"
-                          aria-label={`Supprimer le profil ${profile.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" /> Supprimer
-                        </button>
+                        <>
+                          <label className="flex items-center gap-2 text-sm font-bold">
+                            <input
+                              type="checkbox"
+                              checked={profile.admin === true}
+                              onChange={(e) => onChange(setAdmin(state, profile.id, e.target.checked))}
+                              className="h-4 w-4 accent-brass"
+                            />
+                            Admin (rien de bloqué)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(profile.id)}
+                            className="mb-btn mb-btn-sm mb-btn-ghost"
+                            aria-label={`Supprimer le profil ${profile.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" /> Supprimer
+                          </button>
+                        </>
                       )}
                     </div>
                   )}

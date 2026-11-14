@@ -419,3 +419,16 @@ export function getNewIntervalsForStep(chord: ChordDefinition, step: VoicingStep
   const before = new Set(getTargetIntervalsForStep(chord, VOICING_STEP_ORDER[index - 1]));
   return getTargetIntervalsForStep(chord, step).filter((i) => !before.has(i));
 }
+
+/** Name of the chord made exactly of these pitch classes, if it is one of ours (root position preferred). */
+export function identifyChord(pitchClasses: readonly number[]): ChordDefinition | null {
+  const target = new Set(pitchClasses.map((p) => ((p % 12) + 12) % 12));
+  for (const root of target) {
+    for (const family of Object.keys(CHORD_FAMILIES) as ChordFamily[]) {
+      const chord = createChord(root, family);
+      const pcs = getTargetPitchClassesForStep(chord, 'full');
+      if (pcs.length === target.size && pcs.every((p) => target.has(p))) return chord;
+    }
+  }
+  return null;
+}

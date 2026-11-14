@@ -27,6 +27,7 @@ import { SessionRecord, StoredData } from '../../storage/types';
 interface ProgressScreenProps {
   storedData: StoredData;
   onStartPractice: (config: PracticeConfig) => void;
+  unlockAll?: boolean;
 }
 
 function formatShortDate(iso: string): string {
@@ -43,6 +44,7 @@ function formatShortDate(iso: string): string {
 export function ProgressScreen({
   storedData,
   onStartPractice,
+  unlockAll = false,
 }: ProgressScreenProps) {
   const { settings, chordStats, spacedCards, sessions, isDemoData } =
     storedData;
@@ -55,7 +57,7 @@ export function ProgressScreen({
     settings.notation,
     spacedCards,
   );
-  const songViews = buildSongPath(SONG_PATH, storedData.playAlongRuns ?? []);
+  const songViews = buildSongPath(SONG_PATH, storedData.playAlongRuns ?? [], unlockAll);
   const skillAssessments = assessSkills(spacedCards, chordStats, storedData.playAlongRuns ?? []);
 
   const allItems = [

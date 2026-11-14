@@ -8,7 +8,7 @@ const run = (songTitle: string, step: PlayAlongRun['step'], bpm: number, extra: 
   total: 30, found: 28, onTime: 25, noteAccuracy: 0.93, timingAccuracy: 0.85, meanOffsetMs: 30, completed: true, ...extra,
 });
 
-const soWhat = SONG_PATH[0].songs[0];
+const firstSong = SONG_PATH[0].songs[0];
 
 describe('resolveTempo', () => {
   it('caps slow and medium tempos for very fast tunes', () => {
@@ -20,20 +20,20 @@ describe('resolveTempo', () => {
 });
 
 describe('runMeetsObjective', () => {
-  const [roots, , triads] = soWhat.objectives;
+  const [roots, , triads] = firstSong.objectives;
   it('needs a complete run of this song, fast enough, accurate enough', () => {
-    expect(runMeetsObjective(run('So What', 'root', 100), soWhat, roots)).toBe(true);
-    expect(runMeetsObjective(run('So What', 'root', 100, { completed: false }), soWhat, roots)).toBe(false);
-    expect(runMeetsObjective(run('Blue Bossa', 'root', 100), soWhat, roots)).toBe(false);
-    expect(runMeetsObjective(run('So What', 'root', 90), soWhat, roots)).toBe(false);
-    expect(runMeetsObjective(run('So What', 'root', 100, { timingAccuracy: 0.4 }), soWhat, roots)).toBe(false);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'root', 100), firstSong, roots)).toBe(true);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'root', 100, { completed: false }), firstSong, roots)).toBe(false);
+    expect(runMeetsObjective(run('Blue Bossa', 'root', 100), firstSong, roots)).toBe(false);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'root', 90), firstSong, roots)).toBe(false);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'root', 100, { timingAccuracy: 0.4 }), firstSong, roots)).toBe(false);
   });
   it('counts a harder step for easier objectives, never the reverse', () => {
-    expect(runMeetsObjective(run('So What', 'full', 140), soWhat, roots)).toBe(true);
-    expect(runMeetsObjective(run('So What', 'root', 140), soWhat, triads)).toBe(false);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'full', 140), firstSong, roots)).toBe(true);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'root', 140), firstSong, triads)).toBe(false);
   });
   it('matches titles with or without "The"', () => {
-    const ipanema = SONG_PATH[4].songs[1];
+    const ipanema = SONG_PATH.flatMap((u) => u.songs).find((x) => x.id === 'girl-from-ipanema')!;
     expect(runMeetsObjective(run('The Girl From Ipanema', 'root', 100, { originalBpm: 140 }), ipanema, ipanema.objectives[0])).toBe(true);
   });
 });
@@ -43,15 +43,25 @@ describe('buildSongPath', () => {
     const views = buildSongPath(SONG_PATH, []);
     expect(views[0].objectives.map((o) => o.state)).toEqual(['current', 'locked', 'locked', 'locked', 'locked']);
     expect(views[1].unlocked).toBe(false);
-    expect(currentSong(views)?.song.id).toBe('so-what');
+    expect(currentSong(views)?.song.id).toBe('cantaloupe-island');
   });
 
   it('unlocks the next song after two objectives, and moves the current marker', () => {
-    const views = buildSongPath(SONG_PATH, [run('So What', 'root', 100), run('So What', 'root-5th', 100)]);
+    const views = buildSongPath(SONG_PATH, [run('Cantaloupe Island', 'root', 100), run('Cantaloupe Island', 'root-5th', 100)]);
     expect(views[0].doneCount).toBe(2);
     expect(views[0].objectives[2].state).toBe('current');
     expect(views[1].unlocked).toBe(true);
     expect(views[1].objectives[0].state).toBe('open');
     expect(views[2].unlocked).toBe(false);
+  });
+});
+
+describe('buildSongPath for an admin profile', () => {
+  it('opens every song and every objective, keeping what is done', () => {
+    const views = buildSongPath(SONG_PATH, [run('Cantaloupe Island', 'root', 100)], true);
+    expect(views.every((v) => v.unlocked)).toBe(true);
+    expect(views.flatMap((v) => v.objectives).some((o) => o.state === 'locked')).toBe(false);
+    expect(views[0].objectives[0].state).toBe('done');
+    expect(views[0].objectives[1].state).toBe('current');
   });
 });

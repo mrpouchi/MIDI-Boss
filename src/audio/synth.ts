@@ -1,4 +1,4 @@
-import { Soundfont } from 'smplr';
+import { CacheStorage, Soundfont, SplendidGrandPiano } from 'smplr';
 import type { InstrumentId } from '../storage/types';
 
 interface ActiveVoice {
@@ -13,10 +13,28 @@ export interface InstrumentDefinition {
   label: string;
   soundfont: string;
   loop?: boolean;
+  /**
+   * 'splendid': the Splendid Grand Piano (multi-velocity sampled grand,
+   * smpldsnds.github.io), far more natural than the General MIDI soundfont.
+   */
+  engine?: 'soundfont' | 'splendid';
+}
+
+type LoadedInstrument = ReturnType<typeof Soundfont> | ReturnType<typeof SplendidGrandPiano>;
+
+/** Samples are cached by the browser (Cache API): downloaded once, then offline. */
+let sampleCache: InstanceType<typeof CacheStorage> | undefined;
+function cachedStorage() {
+  try {
+    sampleCache ??= new CacheStorage('midiboss-samples');
+  } catch {
+    sampleCache = undefined;
+  }
+  return sampleCache;
 }
 
 export const INSTRUMENTS: InstrumentDefinition[] = [
-  { id: 'piano', label: 'Piano acoustique', soundfont: 'acoustic_grand_piano' },
+  { id: 'piano', label: 'Grand piano', soundfont: 'acoustic_grand_piano', engine: 'splendid' },
   { id: 'rhodes', label: 'Piano électrique (Rhodes)', soundfont: 'electric_piano_1' },
   { id: 'vibraphone', label: 'Vibraphone', soundfont: 'vibraphone', loop: true },
   { id: 'organ', label: 'Orgue jazz', soundfont: 'drawbar_organ', loop: true },
@@ -42,12 +60,18 @@ function midiToFrequency(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
+/** Highest keyboard volume: 3 = 300 %. Above 100 % the limiter keeps it clean. */
+export const MAX_AUDIO_VOLUME = 3;
+/** Master gain at 100 %, unchanged from before the boost existed. */
+const UNITY_GAIN = 0.45;
+
 class PianoSynthEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
   private voices = new Map<number, ActiveVoice>();
   private sampledVoices = new Map<number, () => void>();
-  private instrument: ReturnType<typeof Soundfont> | null = null;
+  private instrument: LoadedInstrument | null = null;
   private instrumentId: InstrumentId = 'piano';
   private instrumentStatus: InstrumentStatus = {
     id: 'piano',
@@ -68,9 +92,9 @@ class PianoSynthEngine {
   }
 
   setVolume(volume: number): void {
-    this.volume = Math.max(0, Math.min(1, volume));
+    this.volume = Math.max(0, Math.min(MAX_AUDIO_VOLUME, volume));
     if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setTargetAtTime(this.volume * 0.45, this.ctx.currentTime, 0.02);
+      this.masterGain.gain.setTargetAtTime(this.volume * UNITY_GAIN, this.ctx.currentTime, 0.02);
     }
   }
 
@@ -160,26 +184,39 @@ class PianoSynthEngine {
     const definition = INSTRUMENTS.find((item) => item.id === id) ?? INSTRUMENTS[0];
     this.updateInstrumentStatus({ id, state: 'loading', loaded: 0, total: 0 });
 
-    // Les échantillons viennent de la banque MIDI.js (MusyngKite) : aucun
-    // serveur local n'est nécessaire. Le contexte peut rester suspendu tant
-    // que l'utilisateur n'a pas interagi ; le décodage des samples fonctionne.
-    const instrument = Soundfont(ctx, {
-      instrument: definition.soundfont,
-      kit: 'MusyngKite',
-      destination: this.masterGain,
-      volume: 127,
-      loadLoopData: definition.loop ?? false,
-      onLoadProgress: ({ loaded, total }) => {
-        if (
-          token !== this.loadToken ||
-          this.instrumentStatus.state === 'ready' ||
-          this.instrumentStatus.state === 'error'
-        ) {
-          return;
-        }
-        this.updateInstrumentStatus({ id, state: 'loading', loaded, total });
-      },
-    });
+    const onLoadProgress = ({ loaded, total }: { loaded: number; total: number }) => {
+      if (
+        token !== this.loadToken ||
+        this.instrumentStatus.state === 'ready' ||
+        this.instrumentStatus.state === 'error'
+      ) {
+        return;
+      }
+      this.updateInstrumentStatus({ id, state: 'loading', loaded, total });
+    };
+    const storage = cachedStorage();
+    // Échantillons en ligne : le grand piano vient du Splendid Grand Piano
+    // (plusieurs couches de vélocité), les autres de la banque MIDI.js
+    // (MusyngKite). Le contexte peut rester suspendu tant que l'utilisateur
+    // n'a pas interagi ; le décodage des samples fonctionne.
+    const instrument: LoadedInstrument =
+      definition.engine === 'splendid'
+        ? SplendidGrandPiano(ctx, {
+            destination: this.masterGain,
+            volume: 127,
+            decayTime: 0.6,
+            onLoadProgress,
+            ...(storage ? { storage } : {}),
+          })
+        : Soundfont(ctx, {
+            instrument: definition.soundfont,
+            kit: 'MusyngKite',
+            destination: this.masterGain,
+            volume: 127,
+            loadLoopData: definition.loop ?? false,
+            onLoadProgress,
+            ...(storage ? { storage } : {}),
+          });
     this.instrument = instrument;
 
     instrument.ready
@@ -230,8 +267,17 @@ class PianoSynthEngine {
         this.ctx = new AudioCtx({ latencyHint: 'interactive' });
       }
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = this.volume * 0.45;
-      this.masterGain.connect(this.ctx.destination);
+      this.masterGain.gain.value = this.volume * UNITY_GAIN;
+      // Limiteur : transparent aux volumes normaux, il évite que le boost
+      // (jusqu'à 300 %) sature quand on plaque un accord fort.
+      this.limiter = this.ctx.createDynamicsCompressor();
+      this.limiter.threshold.value = -3;
+      this.limiter.knee.value = 4;
+      this.limiter.ratio.value = 20;
+      this.limiter.attack.value = 0.002;
+      this.limiter.release.value = 0.12;
+      this.masterGain.connect(this.limiter);
+      this.limiter.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       void this.ctx.resume();

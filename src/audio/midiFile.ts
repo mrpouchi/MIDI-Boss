@@ -46,7 +46,9 @@ export const IREAL_DRUM_TO_GM: Record<number, number> = {
 
 export function trackLabel(track: ParsedMidi['tracks'][number]) {
   const name = track.find((event) => event.type === 'trackName');
-  return name && 'text' in name ? name.text.trim().toLowerCase() : '';
+  // MuseScore exports end names with a NUL byte ("Piano\u0000").
+  // eslint-disable-next-line no-control-regex
+  return name && 'text' in name ? name.text.replace(/[\u0000-\u001f]/g, '').trim().toLowerCase() : '';
 }
 
 export function looksLikeIRealExport(parsed: ParsedMidi) {
@@ -66,7 +68,8 @@ export function looksLikeIRealExport(parsed: ParsedMidi) {
  * 2. drum note-offs removed: drums are one-shot. iReal releases every hit
  *    after ~0.1 s (sometimes 0 ticks), and this player stops the sample at
  *    note-off, which chokes the ride into a hi-hat and silences some snares;
- * 3. ride hits rotated over RIDE_VOICE_KEYS so the cymbal keeps ringing.
+ * 3. ride hits rotated over RIDE_VOICE_KEYS so the cymbal keeps ringing;
+ * 4. programs that GM renders badly replaced (IREAL_PROGRAM_TO_GM).
  */
 export function prepareDrumMapping(buffer: ArrayBuffer, remap: boolean) {
   const parsed = parseMidi(new Uint8Array(buffer));
@@ -80,6 +83,9 @@ export function prepareDrumMapping(buffer: ArrayBuffer, remap: boolean) {
     const out: typeof track = [];
     for (const event of track) {
       tick += event.deltaTime;
+      if (event.type === 'programChange' && event.channel !== 9 && event.programNumber in IREAL_PROGRAM_TO_GM) {
+        event.programNumber = IREAL_PROGRAM_TO_GM[event.programNumber];
+      }
       if ((event.type === 'noteOn' || event.type === 'noteOff') && event.channel === 9) {
         const isHit = event.type === 'noteOn' && event.velocity > 0;
         if (!isHit) continue; // one-shot drums: drop the release
@@ -108,7 +114,9 @@ export function describeTracks(buffer: ArrayBuffer): MidiTrack[] {
     if (!channelEvent || !('channel' in channelEvent)) return [];
     // midi-file expose des canaux 0–15, midi-audio-player attend des canaux 1–16.
     const channel = channelEvent.channel + 1;
-    return [{ channel, name: name && 'text' in name ? name.text : `Canal ${channel}` }];
+    // eslint-disable-next-line no-control-regex
+    const label = name && 'text' in name ? name.text.replace(/[\u0000-\u001f]/g, '').trim() : '';
+    return [{ channel, name: label || `Canal ${channel}` }];
   });
 }
 
@@ -157,9 +165,25 @@ export interface MidiAnalysis {
   totalBars: number;
   /** 0-based bar where the first pitched (non-drum, non-click) note sounds. */
   firstMusicBar: number;
-  /** Channels (1–16) whose track is named "Piano" — muted when the learner plays. */
+  /**
+   * Channels (1–16) of the chord parts, tracks named "Piano" or "Harmony":
+   * muted when the learner plays (they are the guide).
+   */
   pianoChannels: number[];
+  /** iReal Pro export (click count-in, Piano/Harmony/Drums tracks). */
+  iReal: boolean;
 }
+
+/** iReal tracks that play the chords: the learner's part. Harmony is empty in jazz styles, used in funk/rock ones. */
+const CHORD_TRACKS = new Set(['piano', 'harmony']);
+
+/**
+ * iReal program numbers that sound wrong on a General MIDI bank. Funk styles
+ * (Cantaloupe Island) put whole-bar chords on Harmony with program 14, which
+ * GM renders as tubular bells: a metallic clang on every bar. Replaced by an
+ * electric piano, the closest plausible comping sound.
+ */
+export const IREAL_PROGRAM_TO_GM: Record<number, number> = { 14: 4 };
 
 export function analyzeMidi(buffer: ArrayBuffer): MidiAnalysis {
   const parsed = parseMidi(new Uint8Array(buffer));
@@ -169,6 +193,13 @@ export function analyzeMidi(buffer: ArrayBuffer): MidiAnalysis {
   let lastTick = 0;
   let firstMusicTick = Number.POSITIVE_INFINITY;
   const pianoChannels = new Set<number>();
+  // Unnamed tracks (some MuseScore exports): a piano program (GM 0–7) marks the pianist's part.
+  const pianoPrograms = new Set<number>();
+  for (const track of parsed.tracks) {
+    for (const event of track) {
+      if (event.type === 'programChange' && event.channel !== 9 && event.programNumber <= 7) pianoPrograms.add(event.channel);
+    }
+  }
   for (const track of parsed.tracks) {
     const label = trackLabel(track);
     let tick = 0;
@@ -182,7 +213,7 @@ export function analyzeMidi(buffer: ArrayBuffer): MidiAnalysis {
       if (event.type === 'timeSignature') beatsPerBar = event.numerator;
       if (event.type === 'noteOn' && event.velocity > 0) {
         lastTick = Math.max(lastTick, tick);
-        if (label === 'piano') pianoChannels.add(event.channel + 1);
+        if (CHORD_TRACKS.has(label) || pianoPrograms.has(event.channel)) pianoChannels.add(event.channel + 1);
         if (event.channel !== 9 && label !== 'click') firstMusicTick = Math.min(firstMusicTick, tick);
       }
     }
@@ -194,6 +225,7 @@ export function analyzeMidi(buffer: ArrayBuffer): MidiAnalysis {
     totalBars: Math.floor(lastTick / ticksPerBar) + 1,
     firstMusicBar: Number.isFinite(firstMusicTick) ? Math.floor(firstMusicTick / ticksPerBar) : 0,
     pianoChannels: [...pianoChannels],
+    iReal: looksLikeIRealExport(parsed),
   };
 }
 
@@ -234,5 +266,190 @@ export function truncateMidiToBars(buffer: ArrayBuffer, bars: number): ArrayBuff
       return out;
     });
   });
+  return new Uint8Array(writeMidi(parsed)).buffer;
+}
+
+/**
+ * Pitch class of the bass at each bar's downbeat (null when silent), taken
+ * from the lowest-sounding pitched track (the bass part of an arrangement).
+ */
+export function bassRootsPerBar(buffer: ArrayBuffer): (number | null)[] {
+  const parsed = parseMidi(new Uint8Array(buffer));
+  const tpb = parsed.header.ticksPerBeat ?? 480;
+  const { beatsPerBar, totalBars } = analyzeMidi(buffer);
+  const ticksPerBar = tpb * beatsPerBar;
+  let best: { mean: number; notes: { tick: number; note: number }[] } | null = null;
+  for (const track of parsed.tracks) {
+    if (trackLabel(track) === 'click') continue;
+    let tick = 0;
+    const notes: { tick: number; note: number }[] = [];
+    for (const event of track) {
+      tick += event.deltaTime;
+      if (event.type === 'noteOn' && event.velocity > 0 && event.channel !== 9) notes.push({ tick, note: event.noteNumber });
+    }
+    if (notes.length < 8) continue;
+    const mean = notes.reduce((sum, n) => sum + n.note, 0) / notes.length;
+    if (!best || mean < best.mean) best = { mean, notes };
+  }
+  const roots: (number | null)[] = Array.from({ length: totalBars }, () => null);
+  for (const n of best?.notes ?? []) {
+    const bar = Math.floor(n.tick / ticksPerBar);
+    // First note within the first beat of the bar (a little early counts too).
+    const into = n.tick - bar * ticksPerBar;
+    if (into < tpb && roots[bar] === null) roots[bar] = n.note % 12;
+  }
+  return roots;
+}
+
+/**
+ * For files that are not iReal exports (no click count-in): the bar where the
+ * chart's form starts, found by matching the bass against the chart roots.
+ * An intro is skipped this way. Null when nothing matches well enough.
+ */
+export function alignFormStart(buffer: ArrayBuffer, formRoots: number[], minScore = 0.6): number | null {
+  const roots = bassRootsPerBar(buffer);
+  if (!formRoots.length || roots.length < formRoots.length) return null;
+  let bestOffset: number | null = null;
+  let bestScore = minScore;
+  for (let offset = 0; offset + formRoots.length <= roots.length; offset++) {
+    let hits = 0;
+    formRoots.forEach((root, i) => {
+      if (roots[offset + i] === root) hits++;
+    });
+    const score = hits / formRoots.length;
+    if (score > bestScore + 1e-9) {
+      bestScore = score;
+      bestOffset = offset;
+    }
+  }
+  return bestOffset;
+}
+
+/**
+ * How many consecutive passes of the form, from `start`, the bass really
+ * follows. Stricter than alignFormStart: a pass is kept only if at most ~15 %
+ * of its bars differ (a walk-up on a downbeat, say). Arrangements of
+ * recordings can stretch a chorus or solo on another form (Song For My
+ * Father solos replace the B section by an A); those passes would show the
+ * wrong chords.
+ */
+export function alignedChoruses(buffer: ArrayBuffer, formRoots: number[], start: number, minScore = 0.85): number {
+  const roots = bassRootsPerBar(buffer);
+  let count = 0;
+  for (let offset = start; offset + formRoots.length <= roots.length; offset += formRoots.length) {
+    const hits = formRoots.filter((root, i) => roots[offset + i] === root).length;
+    if (hits / formRoots.length < minScore) break;
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Adds `bars` bars of count-in (side-stick clicks, accent on beat 1) before the
+ * music, for files that start straight away. Notes move later; tempo, meter
+ * and program changes stay at the start.
+ */
+export function prependCountIn(buffer: ArrayBuffer, bars = 1): ArrayBuffer {
+  const parsed = parseMidi(new Uint8Array(buffer));
+  const tpb = parsed.header.ticksPerBeat ?? 480;
+  const { beatsPerBar } = analyzeMidi(buffer);
+  const shift = bars * beatsPerBar * tpb;
+  parsed.tracks = parsed.tracks.map((track) => {
+    let tick = 0;
+    const timed = track.map((event) => {
+      tick += event.deltaTime;
+      const moves = event.type === 'noteOn' || event.type === 'noteOff' || event.type === 'endOfTrack';
+      return { event, at: moves ? tick + shift : tick };
+    });
+    timed.sort((a, b) => a.at - b.at);
+    let previous = 0;
+    return timed.map(({ event, at }) => {
+      const out = { ...event, deltaTime: at - previous };
+      previous = at;
+      return out;
+    });
+  });
+  const click: (typeof parsed.tracks)[number] = [{ deltaTime: 0, meta: true, type: 'trackName', text: 'Click' }];
+  for (let beat = 0; beat < bars * beatsPerBar; beat++) {
+    click.push({ deltaTime: beat === 0 ? 0 : tpb - 60, type: 'noteOn', channel: 9, noteNumber: 37, velocity: beat % beatsPerBar === 0 ? 110 : 80 });
+    click.push({ deltaTime: 60, type: 'noteOff', channel: 9, noteNumber: 37, velocity: 0 });
+  }
+  click.push({ deltaTime: 0, meta: true, type: 'endOfTrack' });
+  parsed.tracks.push(click);
+  parsed.header.numTracks = parsed.tracks.length;
+  return new Uint8Array(writeMidi(parsed)).buffer;
+}
+
+/**
+ * A file that opens with a pickup bar (e.g. one beat of 1/4 before the 4/4)
+ * is padded with silence so the pickup becomes the end of a full bar: every
+ * bar computation (count-in, alignment, truncation) then lands on the barline.
+ * Files without a pickup are returned unchanged.
+ */
+export function normalizePickup(buffer: ArrayBuffer): ArrayBuffer {
+  const parsed = parseMidi(new Uint8Array(buffer));
+  const tpb = parsed.header.ticksPerBeat ?? 480;
+  const signatures: { tick: number; numerator: number; denominator: number }[] = [];
+  for (const track of parsed.tracks) {
+    let tick = 0;
+    for (const event of track) {
+      tick += event.deltaTime;
+      if (event.type === 'timeSignature') signatures.push({ tick, numerator: event.numerator, denominator: event.denominator });
+    }
+  }
+  signatures.sort((a, b) => a.tick - b.tick);
+  const [pickup, main] = signatures;
+  if (!pickup || !main || pickup.tick !== 0) return buffer;
+  const pickupTicks = (pickup.numerator * tpb * 4) / pickup.denominator;
+  const barTicks = (main.numerator * tpb * 4) / main.denominator;
+  if (main.tick !== pickupTicks || pickupTicks >= barTicks) return buffer;
+  const pad = barTicks - pickupTicks;
+
+  parsed.tracks = parsed.tracks.map((track) => {
+    let tick = 0;
+    const timed = track.flatMap((event) => {
+      tick += event.deltaTime;
+      if (event.type === 'timeSignature' && tick === 0) return []; // the pickup signature
+      // Set-up events at the very start stay there (tempo, names, programs).
+      const stays = tick === 0 && event.type !== 'noteOn' && event.type !== 'noteOff';
+      return [{ event, at: stays ? 0 : tick + pad }];
+    });
+    let previous = 0;
+    return timed.map(({ event, at }) => {
+      const out = { ...event, deltaTime: at - previous };
+      previous = at;
+      return out;
+    });
+  });
+  return new Uint8Array(writeMidi(parsed)).buffer;
+}
+
+/**
+ * midi-audio-player trims the silence before the first note, which would
+ * shift the whole song earlier than the chart (Song For My Father after its
+ * pickup was padded: ~1.7 s early). An inaudible hit (velocity 1, hi-hat) at
+ * tick 0 keeps the file's own start as the player's start.
+ */
+export function anchorStart(buffer: ArrayBuffer): ArrayBuffer {
+  const parsed = parseMidi(new Uint8Array(buffer));
+  let first = Number.POSITIVE_INFINITY;
+  for (const track of parsed.tracks) {
+    let tick = 0;
+    for (const event of track) {
+      tick += event.deltaTime;
+      if (event.type === 'noteOn' && event.velocity > 0) {
+        first = Math.min(first, tick);
+        break;
+      }
+    }
+  }
+  if (first === 0 || !Number.isFinite(first)) return buffer;
+  parsed.tracks.push([
+    { deltaTime: 0, meta: true, type: 'trackName', text: 'Anchor' },
+    { deltaTime: 0, type: 'noteOn', channel: 9, noteNumber: 42, velocity: 1 },
+    { deltaTime: 1, type: 'noteOff', channel: 9, noteNumber: 42, velocity: 0 },
+    { deltaTime: 0, meta: true, type: 'endOfTrack' },
+  ]);
+  parsed.header.numTracks = parsed.tracks.length;
   return new Uint8Array(writeMidi(parsed)).buffer;
 }

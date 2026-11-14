@@ -9,6 +9,7 @@ import {
   deleteProfile,
   loadProfiles,
   profileKey,
+  setAdmin,
   signIn,
   signOut,
 } from '../profiles';
@@ -84,5 +85,17 @@ describe('local profiles', () => {
     const gone = deleteProfile(loadProfiles(store), profile.id, store);
     expect(gone.profiles).toHaveLength(0);
     expect(store.data.has(profileKey(profile.id))).toBe(false);
+  });
+});
+
+describe('admin profile', () => {
+  it('turns admin on and off and saves it', async () => {
+    const store = memoryStore();
+    const { state, profile } = await createProfile({ profiles: [], activeId: null }, { name: 'Prof', color: '#000' }, store);
+    const on = setAdmin(state, profile.id, true, store);
+    expect(loadProfiles(store).profiles[0].admin).toBe(true);
+    const off = setAdmin(on, profile.id, false, store);
+    expect(off.profiles[0].admin).toBeUndefined();
+    expect(loadProfiles(store).profiles[0].admin).toBeUndefined();
   });
 });
