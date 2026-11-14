@@ -288,3 +288,23 @@ describe('anchorStart', () => {
     expect(anchorStart(buf)).toBe(buf);
   });
 });
+
+describe('removeClickTracks', () => {
+  it('drops the count-in added by prependCountIn and keeps the drums on the same channel', async () => {
+    const { parseMidi, writeMidi } = await import('midi-file');
+    const { prependCountIn, removeClickTracks, describeTracks } = await import('../midiFile');
+    const drums = [
+      { deltaTime: 0, meta: true, type: 'trackName', text: 'Drums' },
+      { deltaTime: 0, type: 'noteOn', channel: 9, noteNumber: 35, velocity: 90 },
+      { deltaTime: 480, type: 'noteOff', channel: 9, noteNumber: 35, velocity: 0 },
+      { deltaTime: 0, meta: true, type: 'endOfTrack' },
+    ];
+    const file = new Uint8Array(writeMidi({ header: { format: 1, numTracks: 1, ticksPerBeat: 480 }, tracks: [drums] } as never)).buffer;
+    const withCount = prependCountIn(file, 1);
+    expect(describeTracks(withCount).map((t) => t.name)).toContain('Click');
+    const cleaned = removeClickTracks(withCount);
+    expect(describeTracks(cleaned).map((t) => [t.name, t.channel])).toEqual([['Drums', 10]]);
+    const kick = parseMidi(new Uint8Array(cleaned)).tracks[0].find((e) => e.type === 'noteOn');
+    expect(kick).toMatchObject({ noteNumber: 35, deltaTime: 4 * 480 });
+  });
+});

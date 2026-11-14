@@ -380,6 +380,25 @@ export function prependCountIn(buffer: ArrayBuffer, bars = 1): ArrayBuffer {
   return new Uint8Array(writeMidi(parsed)).buffer;
 }
 
+/** Track names that hold a count-in (iReal's, or the one prependCountIn adds). */
+export const isClickTrackName = (name: string) => name.trim().toLowerCase() === 'click';
+
+/**
+ * Drops the count-in tracks ("Click"). Needed when the app plays its own
+ * metronome: a click track often shares the drum channel, so it can't be
+ * silenced by channel volume without silencing the drums too.
+ */
+export function removeClickTracks(buffer: ArrayBuffer): ArrayBuffer {
+  const parsed = parseMidi(new Uint8Array(buffer));
+  const kept = parsed.tracks.filter(
+    (track) => !track.some((e) => e.type === 'trackName' && isClickTrackName((e as { text: string }).text)),
+  );
+  if (kept.length === parsed.tracks.length) return buffer;
+  parsed.tracks = kept;
+  parsed.header.numTracks = kept.length;
+  return new Uint8Array(writeMidi(parsed)).buffer;
+}
+
 /**
  * A file that opens with a pickup bar (e.g. one beat of 1/4 before the 4/4)
  * is padded with silence so the pickup becomes the end of a full bar: every

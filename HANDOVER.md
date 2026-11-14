@@ -542,3 +542,9 @@ Faire valider à l’utilisateur l’écoute du mixage restauré et de la batter
   - sortie audio : `latencyHint: 0`, `baseLatency` 2,7 ms (128 échantillons à 48 kHz). Le reste dépend du matériel : un casque Bluetooth ajoute 150 à 250 ms, rien à faire côté code.
 - Instruments coupés : bouton haut-parleur au début de chaque ligne de « Sons de l'orchestre ». Gardé par morceau dans `settings.bandMuted[songTitleKey]` (canaux 0–15), passé à `BackingOptions.muted` ; `BackingTrack.setMuted` agit en direct pendant « Écouter le morceau ».
 - Mesure touche → son affichée dans l'appli : `pianoSynth.recordInputDelay` (écart entre l'horodatage du message MIDI et son arrivée au synthé, médiane des 30 dernières notes) + latence de sortie (`outputLatency`, sinon `baseLatency`). Badge « N ms » dans l'en-tête de l'entraînement (`LatencyBadge`, orange au-delà de 30 ms, rouge au-delà de 60 ms, détail au survol) et ligne dans les réglages.
+
+## Batterie muette sur Blue Bossa (14 novembre 2026)
+
+- Cause : sans son intro, Blue Bossa commence sur la grille, donc `prependCountIn` ajoute une piste « Click » (rimshot) sur le canal 10, celui de la batterie. Pendant l'exercice, l'appli joue son propre métronome et mettait les canaux des pistes « Click » à 0 : le volume étant par canal, toute la batterie était coupée.
+- Correctif : avec le métronome de l'appli, `BackingTrack.load` retire les pistes « Click » du fichier (`removeClickTracks`). Sans métronome, une piste « Click » ne règle le volume de son canal que si aucune autre piste ne l'utilise. Même règle pour la liste « Sons de l'orchestre ».
+- Vérifié : batterie de Blue Bossa à un niveau normal (pic 0,07), Song For My Father inchangé. Test ajouté dans `midiFile.test.ts`.

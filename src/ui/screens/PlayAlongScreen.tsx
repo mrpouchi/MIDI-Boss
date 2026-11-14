@@ -1,7 +1,7 @@
 import { Play, RotateCcw, Square, Volume1, Volume2, VolumeX, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackingTrack } from '../../audio/backingTrack';
-import { MidiAnalysis, alignFormStart, alignedChoruses, analyzeMidi, describeTracks, normalizePickup, prependCountIn } from '../../audio/midiFile';
+import { MidiAnalysis, isClickTrackName, alignFormStart, alignedChoruses, analyzeMidi, describeTracks, normalizePickup, prependCountIn } from '../../audio/midiFile';
 import { listBandParts, auditionSound, stopAudition } from '../../audio/bandSequencer';
 import { SOUND_LIBRARY, familyOf, partLabel, resolveSound } from '../../audio/bandInstruments';
 import { songTitleKey } from '../../content/localSongs';
@@ -310,9 +310,10 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   };
   const bandParts = useMemo(() => {
     if (!midiInfo || !midiBufferRef.current) return [];
-    const clickChannels = describeTracks(midiBufferRef.current)
-      .filter((t) => t.name.trim().toLowerCase() === 'click')
-      .map((t) => t.channel - 1);
+    // Skip a channel that carries only a count-in (a click track can share the drum channel).
+    const tracks = describeTracks(midiBufferRef.current);
+    const music = new Set(tracks.filter((t) => !isClickTrackName(t.name)).map((t) => t.channel));
+    const clickChannels = tracks.filter((t) => isClickTrackName(t.name) && !music.has(t.channel)).map((t) => t.channel - 1);
     return listBandParts(midiBufferRef.current, clickChannels);
   }, [midiInfo]);
 

@@ -4,6 +4,8 @@ import {
   MidiAnalysis,
   analyzeMidi,
   describeTracks,
+  isClickTrackName,
+  removeClickTracks,
   prepareDrumMapping,
   setMidiTempo,
   truncateMidiToBars,
@@ -47,8 +49,9 @@ export class BackingTrack {
 
   async load(original: ArrayBuffer, opts: BackingOptions): Promise<MidiAnalysis> {
     const analysis = analyzeMidi(original);
-    const tracks = describeTracks(original);
-    let buffer = prepareDrumMapping(original, true).buffer;
+    // With the app's metronome, the file's own count-in goes (see removeClickTracks).
+    const source = opts.metronomeBar === undefined ? original : removeClickTracks(original);
+    let buffer = prepareDrumMapping(source, true).buffer;
     if (Math.abs(analysis.bpm - opts.bpm) > 0.01) buffer = setMidiTempo(buffer, opts.bpm);
     if (opts.bars !== undefined && opts.bars < analysis.totalBars) buffer = truncateMidiToBars(buffer, opts.bars);
 
@@ -63,11 +66,13 @@ export class BackingTrack {
           })),
     );
     // Channels here are 1–16 (describeTracks), the sequencer counts 0–15.
-    for (const track of tracks) {
+    // Volume is per channel: a click track only sets it when no music shares the channel.
+    const kept = describeTracks(source);
+    const musicChannels = new Set(kept.filter((t) => !isClickTrackName(t.name)).map((t) => t.channel));
+    for (const track of kept) {
       const isPiano = analysis.pianoChannels.includes(track.channel);
-      const isClick = track.name.trim().toLowerCase() === 'click';
-      const clickVolume = opts.metronomeBar === undefined ? 0.9 : 0;
-      this.channelVolumes.set(track.channel - 1, isPiano ? opts.pianoGuideVolume : isClick ? clickVolume : 0.85);
+      const isClick = isClickTrackName(track.name) && !musicChannels.has(track.channel);
+      this.channelVolumes.set(track.channel - 1, isPiano ? opts.pianoGuideVolume : isClick ? 0.9 : 0.85);
     }
     this.muted = new Set(opts.muted ?? []);
     this.channelVolumes.forEach((_, ch) => this.applyVolume(ch));
