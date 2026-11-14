@@ -59,6 +59,10 @@ export interface AudioLatencyInfo {
   outputMs: number;
   totalMs: number;
   sampleRate: number;
+  /** Median delay between a MIDI key press and the note being played (ms), null before any note. */
+  inputMs: number | null;
+  /** Key press to sound leaving the computer: input + output (ms). */
+  keyToSoundMs: number;
 }
 
 export interface InstrumentStatus {
@@ -112,6 +116,14 @@ class PianoSynthEngine {
   private loadToken = 0;
   private enabled = true;
   private volume = 0.65;
+  private inputDelays: number[] = [];
+
+  /** Delay between a MIDI message's timestamp and the moment it reached the synth. */
+  recordInputDelay(ms: number): void {
+    if (!Number.isFinite(ms) || ms < 0 || ms > 1000) return;
+    this.inputDelays.push(ms);
+    if (this.inputDelays.length > 30) this.inputDelays.shift();
+  }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -139,11 +151,16 @@ class PianoSynthEngine {
     if (!this.ctx) return null;
     const base = Number.isFinite(this.ctx.baseLatency) ? this.ctx.baseLatency : 0;
     const output = Number.isFinite(this.ctx.outputLatency) ? this.ctx.outputLatency : 0;
+    const sorted = [...this.inputDelays].sort((a, b) => a - b);
+    const inputMs = sorted.length ? sorted[sorted.length >> 1] : null;
+    const totalMs = (output > 0 ? output : base) * 1000;
     return {
       baseMs: base * 1000,
       outputMs: output * 1000,
-      totalMs: (output > 0 ? output : base) * 1000,
+      totalMs,
       sampleRate: this.ctx.sampleRate,
+      inputMs,
+      keyToSoundMs: totalMs + (inputMs ?? 0),
     };
   }
 

@@ -132,6 +132,7 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
     const unsubNote = controller.onNoteEvent((note, isDown, velocity, timeMs) => {
       emitNote(note, isDown, timeMs);
       if (isDown) {
+        pianoSynth.recordInputDelay(performance.now() - timeMs);
         pianoSynth.noteOn(note, velocity);
         setMidiNotes((prev) => {
           const next = new Set(prev);

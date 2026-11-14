@@ -37,6 +37,7 @@ import { Mascot, MascotMood } from '../components/Mascot';
 import { VirtualKeyboard } from '../components/VirtualKeyboard';
 import { ChordDiscovery } from '../components/ChordDiscovery';
 import { KeyboardVolume } from '../components/KeyboardVolume';
+import { LatencyBadge } from '../components/LatencyBadge';
 import { GestureChordSetting, gestureChordLabel } from '../components/GestureChordSetting';
 import { useChordGesture } from '../../input/useChordGesture';
 import { isValidGestureChord } from '../../input/chordGesture';
@@ -726,7 +727,10 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
           />
         )}
         {settings.audioEnabled && (
-          <KeyboardVolume compact value={settings.audioVolume} onChange={(audioVolume) => onUpdateSettings({ audioVolume })} />
+          <>
+            <LatencyBadge />
+            <KeyboardVolume compact value={settings.audioVolume} onChange={(audioVolume) => onUpdateSettings({ audioVolume })} />
+          </>
         )}
       </header>
 

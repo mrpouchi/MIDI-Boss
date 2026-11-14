@@ -237,8 +237,9 @@ export function SettingsDrawer({
                 </p>
                 {latency && (
                   <p className="mt-1 text-[11px] text-muted">
-                    Latence de sortie estimée : ~{Math.round(latency.totalMs)} ms
-                    {latency.outputMs === 0 ? ' (estimation du navigateur)' : ''}.
+                    Touche → son : ~{Math.round(latency.keyToSoundMs)} ms (sortie audio{' '}
+                    {Math.round(latency.totalMs)} ms{latency.outputMs === 0 ? ', estimation du navigateur' : ''}
+                    {latency.inputMs !== null ? `, arrivée du MIDI ${latency.inputMs.toFixed(1)} ms` : ''}).
                     Une sortie Bluetooth ajoute souvent 100 à 300 ms.
                   </p>
                 )}
