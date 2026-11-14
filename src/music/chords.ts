@@ -392,3 +392,30 @@ export function parseProgression(input: string): ParsedProgressionResult {
 
   return { chords, invalidTokens };
 }
+
+/** French name of an interval (in semitones above the root) inside a chord. */
+export function intervalNameFr(semitones: number): string {
+  const names: Record<number, string> = {
+    0: 'fondamentale',
+    1: 'neuvième mineure',
+    2: 'seconde',
+    3: 'tierce mineure',
+    4: 'tierce majeure',
+    5: 'quarte',
+    6: 'quinte diminuée',
+    7: 'quinte',
+    8: 'quinte augmentée',
+    9: 'sixte',
+    10: 'septième mineure',
+    11: 'septième majeure',
+  };
+  return names[((semitones % 12) + 12) % 12];
+}
+
+/** Intervals a step adds compared with the previous one (what is new to learn). */
+export function getNewIntervalsForStep(chord: ChordDefinition, step: VoicingStep): number[] {
+  const index = VOICING_STEP_ORDER.indexOf(step);
+  if (index <= 0) return getTargetIntervalsForStep(chord, step);
+  const before = new Set(getTargetIntervalsForStep(chord, VOICING_STEP_ORDER[index - 1]));
+  return getTargetIntervalsForStep(chord, step).filter((i) => !before.has(i));
+}

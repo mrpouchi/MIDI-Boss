@@ -122,6 +122,28 @@ artificielle** (pas d’XP, pièces, séries), aucune fausse donnée.
     échantillon dans le kit maison, ce qui laisse chaque coup résonner sous le suivant (2 s au maximum, une
     limite du lecteur).
 
+### Profils locaux et écran « Découverte » (14 novembre 2026)
+
+- **Profils** : écran « Qui joue ? » au lancement, créé par `src/Root.tsx`, avec `ui/screens/ProfileScreen.tsx`
+  et `storage/profiles.ts`.
+  - Chaque profil a sa sauvegarde, sous `midiboss:profile:<id>:v1`.
+  - La bibliothèque iReal et les mixages MIDI sont partagés, sous `midiboss:shared:v1`.
+  - Le premier profil créé reprend l'ancienne sauvegarde (`chord-practice:v1`, conservée comme copie de secours)
+    si ce n'étaient pas des données de démo.
+  - Un nouveau profil démarre vide : aucune donnée de démo.
+  - Code à 4 chiffres facultatif, haché en SHA-256 et salé par l'id du profil. C'est un garde-fou contre les
+    erreurs, pas une vraie sécurité.
+  - Tout reste dans le localStorage du navigateur.
+- **Bug corrigé** : l'ancien `loadStoredData` ne rechargeait pas `playAlongRuns`. La progression des chansons
+  était perdue au rechargement.
+- **Découverte** (`ui/components/ChordDiscovery.tsx`) : c'est la première phase de chaque séance avec
+  l'orchestre.
+  - Elle présente la notion nouvelle de l'étape (`content/stepIntros.ts`) et chaque accord du morceau, une seule
+    fois chacun, avec les notes nommées par intervalle. La note nouvelle est surlignée (`getNewIntervalsForStep`).
+  - On peut écouter chaque accord et l'essayer au clavier. Rien n'est chronométré, noté ni enregistré.
+  - « Je suis prêt » mène aux réglages ; « Revoir les accords » y ramène.
+  - **Règle produit** : toute nouvelle notion est montrée ainsi avant d'être évaluée.
+
 ### Prochaines étapes
 
 Phase B du plan : étendre la théorie (dim, m7b5…), format de chanson réel (Blue Bossa), objectifs de chanson

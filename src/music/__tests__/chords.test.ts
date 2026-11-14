@@ -40,3 +40,16 @@ describe('half-diminished and diminished chords', () => {
     expect(parseChordToken('Cm7')?.family).toBe('m7');
   });
 });
+
+describe('what each step introduces', () => {
+  it('the third is new at the triad step, the seventh at the full step', async () => {
+    const { createChord, getNewIntervalsForStep, intervalNameFr } = await import('../chords');
+    const dm7 = createChord(2, 'm7');
+    expect(getNewIntervalsForStep(dm7, 'root')).toEqual([0]);
+    expect(getNewIntervalsForStep(dm7, 'root-5th')).toEqual([7]);
+    expect(getNewIntervalsForStep(dm7, 'triad')).toEqual([3]);
+    expect(getNewIntervalsForStep(dm7, 'full')).toEqual([10]);
+    expect(intervalNameFr(3)).toBe('tierce mineure');
+    expect(intervalNameFr(11)).toBe('septième majeure');
+  });
+});

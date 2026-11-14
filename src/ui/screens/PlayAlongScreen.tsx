@@ -32,6 +32,7 @@ import { PathSong, SongObjective, TEMPO_LABEL, TempoLevel, resolveTempo } from '
 import { runMeetsObjective } from '../../practice/songProgress';
 import { Mascot, MascotMood } from '../components/Mascot';
 import { VirtualKeyboard } from '../components/VirtualKeyboard';
+import { ChordDiscovery } from '../components/ChordDiscovery';
 
 interface PlayAlongScreenProps {
   localSong: LocalSongFile;
@@ -58,7 +59,7 @@ function formatDuration(seconds: number): string {
   return m > 0 ? `${m} min ${String(sec).padStart(2, '0')}` : `${sec} s`;
 }
 
-type Phase = 'setup' | 'loading' | 'playing' | 'done';
+type Phase = 'discover' | 'setup' | 'loading' | 'playing' | 'done';
 
 const TEMPO_LEVELS: TempoLevel[] = ['slow', 'medium', 'original'];
 
@@ -91,7 +92,8 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
 
   const [chart, setChart] = useState<ChordChart | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<Phase>('setup');
+  // Every run starts by showing the song's chords calmly (new notion first).
+  const [phase, setPhase] = useState<Phase>('discover');
   const goal = props.objective;
   const [step, setStep] = useState<VoicingStep>(goal?.objective.step ?? 'root');
   const [tempoLevel, setTempoLevel] = useState<TempoLevel>(goal?.objective.tempo ?? 'slow');
@@ -408,6 +410,27 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
 
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-5xl flex-col items-center px-4 pt-6 pb-10 sm:px-8">
+          {/* ---------- Discover: the chords first, without pressure ---------- */}
+          {phase === 'discover' &&
+            (chart ? (
+              <ChordDiscovery
+                chart={chart}
+                step={step}
+                notation={notation}
+                hint={goal?.objective.hint}
+                activeNotes={activeNotes}
+                virtualLatchNotes={props.virtualLatchNotes}
+                onPressVirtualNote={props.onPressVirtualNote}
+                onReleaseVirtualNote={props.onReleaseVirtualNote}
+                onToggleLatchNote={props.onToggleLatchNote}
+                onClearVirtualLatchNotes={props.onClearVirtualLatchNotes}
+              />
+            ) : (
+              <p className="mt-10 font-bold text-muted">
+                {chartError ? `Impossible de lire la grille iReal : ${chartError}` : 'Lecture de la grille…'}
+              </p>
+            ))}
+
           {/* ---------- Setup ---------- */}
           {(phase === 'setup' || phase === 'loading') && (
             <div className="w-full max-w-2xl">
@@ -684,6 +707,16 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
 
       <footer className="border-t-2 border-line">
         <div className="mx-auto flex min-h-24 w-full max-w-5xl items-center justify-end gap-3 px-4 py-4 sm:px-8">
+          {phase === 'discover' && (
+            <button type="button" disabled={!chart} onClick={() => setPhase('setup')} className="mb-btn mb-btn-green min-w-48">
+              Je suis prêt
+            </button>
+          )}
+          {phase === 'setup' && chart && (
+            <button type="button" onClick={() => setPhase('discover')} className="mb-btn mb-btn-ghost">
+              Revoir les accords
+            </button>
+          )}
           {(phase === 'setup' || phase === 'loading') && (
             <button
               type="button"

@@ -33,9 +33,15 @@ import { PathScreen } from './ui/screens/PathScreen';
 import { PlayAlongScreen } from './ui/screens/PlayAlongScreen';
 import { LocalSongFile } from './content/localSongs';
 import { PathSong, SongObjective } from './content/songPath';
+import { Profile } from './storage/profiles';
 
-export default function App() {
-  const [storedData, setStoredData] = useState<StoredData>(() => loadStoredData());
+interface AppProps {
+  profile: Profile;
+  onSwitchProfile: () => void;
+}
+
+export default function App({ profile, onSwitchProfile }: AppProps) {
+  const [storedData, setStoredData] = useState<StoredData>(() => loadStoredData(profile.id));
   const [activeTab, setActiveTab] = useState<AppTab>('today');
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -81,8 +87,8 @@ export default function App() {
   );
 
   useEffect(() => {
-    saveStoredData(storedData);
-  }, [storedData]);
+    saveStoredData(profile.id, storedData);
+  }, [profile.id, storedData]);
 
   useEffect(() => {
     const isDark = storedData.settings.theme === 'dark';
@@ -475,6 +481,8 @@ export default function App() {
           setActiveTab(tab);
         }}
         onOpenSettings={() => setSettingsOpen(true)}
+        profile={profile}
+        onSwitchProfile={onSwitchProfile}
         midiState={midiState}
         theme={storedData.settings.theme}
         onToggleTheme={() =>
@@ -568,10 +576,19 @@ export default function App() {
         subscribeMidiRaw={subscribeMidiRaw}
         isDemoData={storedData.isDemoData}
         onRestoreDemoData={() =>
-          setStoredData((prev) => createDemoData(prev.settings))
+          setStoredData((prev) => ({
+            ...createDemoData(prev.settings),
+            irealLibrary: prev.irealLibrary,
+            midiSetups: prev.midiSetups,
+          }))
         }
         onClearAllData={() =>
-          setStoredData((prev) => createEmptyData(prev.settings))
+          // Clears this profile's progress only; the shared song library stays.
+          setStoredData((prev) => ({
+            ...createEmptyData(prev.settings),
+            irealLibrary: prev.irealLibrary,
+            midiSetups: prev.midiSetups,
+          }))
         }
       />
     </div>

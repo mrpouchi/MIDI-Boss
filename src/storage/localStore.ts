@@ -8,8 +8,14 @@ import {
   SpacedCard,
   StoredData,
 } from './types';
-
-const STORAGE_KEY = 'chord-practice:v1';
+import {
+  KeyValueStore,
+  SHARED_KEY,
+  browserStore,
+  profileKey,
+  readStoredJson,
+  writeStoredJson,
+} from './profiles';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
@@ -287,46 +293,35 @@ export function createDemoData(settings: AppSettings = DEFAULT_SETTINGS): Stored
   };
 }
 
-export function loadStoredData(): StoredData {
-  if (typeof window === 'undefined') {
-    return createDemoData();
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const demo = createDemoData();
-      saveStoredData(demo);
-      return demo;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<StoredData>;
-    return {
-      version: 1,
-      isDemoData: Boolean(parsed.isDemoData),
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...(parsed.settings ?? {}),
-      },
-      chordStats: parsed.chordStats ?? {},
-      spacedCards: parsed.spacedCards ?? {},
-      songProgress: parsed.songProgress ?? {},
-      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-      irealLibrary: Array.isArray(parsed.irealLibrary) ? parsed.irealLibrary : [],
-      midiSetups: parsed.midiSetups ?? {},
-    };
-  } catch {
-    return createDemoData();
-  }
+/**
+ * Loads one profile's save, merged with what all profiles share (iReal
+ * library, MIDI mixes). A new profile starts empty: no demo data.
+ */
+export function loadStoredData(profileId: string, store: KeyValueStore | null = browserStore()): StoredData {
+  const parsed = readStoredJson<Partial<StoredData>>(store, profileKey(profileId)) ?? {};
+  const shared = readStoredJson<Partial<StoredData>>(store, SHARED_KEY) ?? {};
+  return {
+    version: 1,
+    isDemoData: Boolean(parsed.isDemoData),
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(parsed.settings ?? {}),
+    },
+    chordStats: parsed.chordStats ?? {},
+    spacedCards: parsed.spacedCards ?? {},
+    songProgress: parsed.songProgress ?? {},
+    sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+    playAlongRuns: Array.isArray(parsed.playAlongRuns) ? parsed.playAlongRuns : [],
+    irealLibrary: Array.isArray(shared.irealLibrary) ? shared.irealLibrary : [],
+    midiSetups: shared.midiSetups ?? {},
+  };
 }
 
-export function saveStoredData(data: StoredData): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Ignore storage quota errors gracefully
-  }
+/** Saves a profile's progress, and the shared library/mixes, in separate keys. */
+export function saveStoredData(profileId: string, data: StoredData, store: KeyValueStore | null = browserStore()): void {
+  const { irealLibrary, midiSetups, ...progress } = data;
+  writeStoredJson(store, profileKey(profileId), progress);
+  writeStoredJson(store, SHARED_KEY, { irealLibrary: irealLibrary ?? [], midiSetups: midiSetups ?? {} });
 }
 
 export function createEmptyData(settings: AppSettings): StoredData {

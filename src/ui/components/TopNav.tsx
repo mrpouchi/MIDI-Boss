@@ -1,6 +1,8 @@
 import { Moon, Settings2, Sun } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { MidiState } from '../../input/types';
+import { Profile } from '../../storage/profiles';
+import { ProfileAvatar } from './ProfileAvatar';
 import { Mascot } from './Mascot';
 
 export type AppTab = 'today' | 'library' | 'play' | 'progress';
@@ -12,6 +14,8 @@ interface AppNavProps {
   midiState: MidiState;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
+  profile: Profile;
+  onSwitchProfile: () => void;
 }
 
 function PathIcon() {
@@ -78,6 +82,8 @@ export function TopNav({
   midiState,
   theme,
   onToggleTheme,
+  profile,
+  onSwitchProfile,
 }: AppNavProps) {
   const midi = midiLabel(midiState);
 
@@ -120,6 +126,18 @@ export function TopNav({
         <div className="mt-auto space-y-2">
           <button
             type="button"
+            onClick={onSwitchProfile}
+            className="mb-lift flex w-full items-center gap-3 rounded-2xl border-2 border-line px-3 py-2 text-left"
+            title="Changer de profil"
+          >
+            <ProfileAvatar profile={profile} size={36} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-display font-semibold">{profile.name}</span>
+              <span className="block text-xs font-bold text-muted">Changer de profil</span>
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={onOpenSettings}
             className="flex w-full items-center gap-3 rounded-2xl border-2 border-line px-3 py-2.5 text-left text-sm font-bold"
             title="Réglages MIDI"
@@ -159,6 +177,9 @@ export function TopNav({
         </span>
         <div className="flex items-center gap-1">
           <span className={`h-2.5 w-2.5 rounded-full ${midi.ok ? 'bg-green' : 'bg-stone-300'}`} title={midi.text} />
+          <button type="button" onClick={onSwitchProfile} aria-label={`Profil : ${profile.name}. Changer de profil`} className="grid h-10 w-10 place-items-center rounded-xl">
+            <ProfileAvatar profile={profile} size={30} />
+          </button>
           <button type="button" onClick={onToggleTheme} aria-label="Changer de thème" className="grid h-10 w-10 place-items-center rounded-xl text-muted">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
