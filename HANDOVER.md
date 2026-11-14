@@ -463,6 +463,15 @@ Règle produit : une fois « Jouer » cliqué, la séance tient sur un écran sa
 - Métronome : `BackingOptions.metronomeBar` = la mesure avant l'entrée (`countInBars - 1`). Clics synthétisés sur l'horloge audio (`BandSequencer.setClicks`), premier temps aigu et plus fort. Les pistes « Click » du fichier sont alors coupées. Vérifié sur Song For My Father : 4 clics espacés de 0,8 s à 75 BPM, juste avant la mesure 1.
 - `withRideVoices` (jazzKit.ts) recopie le ride de n'importe quel kit sur les touches de rotation (51, 59, 90).
 
+## Pause et navigation pendant le morceau (14 novembre 2026)
+
+- R : retour au premier accord de la grille, après une mesure de métronome ; c'est un nouvel essai (le drapeau « navigué » est remis à zéro, il peut donc valider l'objectif).
+- Espace : pause / reprise. Flèches ← → : accord précédent / suivant ; ↑ ↓ : une ligne de la grille (4 mesures, 8 pour les longues formes). Une flèche met en pause. Boutons « Pause / Reprendre » dans le pied de page pour la souris.
+- En pause, l'orchestre s'arrête (`BackingTrack.pause`), les notes jouées ne sont pas notées, et la mesure du curseur s'affiche en jaune.
+- Reprise : `BackingTrack.resumeAt(ms)` joue une mesure de métronome, puis l'orchestre à partir du curseur (`BandSequencer.start(fromS, preRollS)`). `PlayAlongScorer.seek(i)` oublie les résultats à partir de l'accord i (rejoués, donc notés à nouveau) ; les accords sautés ne sont pas notés.
+- Un morceau où l'on a navigué compte comme entraînement : il ne valide pas d'objectif, et le conseil final le dit.
+- Correctif d'arrondi : un curseur posé exactement sur une barre de mesure affichait la mesure d'avant (`barGlobal` + 1e-6).
+
 ## Git et modifications non commit (PÉRIMÉ : ces fichiers sont commités dans 7fe9742)
 
 Dernier commit de base : `273b893 feat: initialize project structure and base UI`.

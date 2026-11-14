@@ -129,6 +129,15 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   latencyRef.current = latencyMs;
   const rafRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
+  // Pause & navigation (Space, arrows): the band stops, a cursor moves in the chart.
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const [cursor, setCursor] = useState(0);
+  const cursorRef = useRef(0);
+  /** Learner moved in the chart: the run is practice, it can't validate an objective. */
+  const navigatedRef = useRef(false);
+  /** Song time where a resumed passage starts (one metronome bar before it). */
+  const [resumeAtMs, setResumeAtMs] = useState<number | null>(null);
   const runConfigRef = useRef({ step, bpm: 0, originalBpm: 0 });
 
   // Read the MIDI once to know its tempo (tempo buttons show real BPM).
@@ -169,7 +178,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     return subscribeNoteEvents((note, on, timeMs) => {
       const backing = backingRef.current;
       const scorer = scorerRef.current;
-      if (!backing || !scorer) return;
+      if (!backing || !scorer || pausedRef.current) return;
       const songMs = backing.songMs(timeMs, latencyRef.current);
       if (songMs === null) return;
       if (on) scorer.noteOn(note, songMs);
@@ -183,7 +192,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   };
 
   const finish = useCallback(
-    async (completed: boolean) => {
+    async (reachedEnd: boolean) => {
+      // A run with jumps in the chart is practice: it doesn't count as complete.
+      const completed = reachedEnd && !navigatedRef.current;
       if (finishedRef.current) return;
       finishedRef.current = true;
       stopLoop();
@@ -194,7 +205,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
         setPhase('setup');
         return;
       }
-      if (completed) scorer.advance(Number.POSITIVE_INFINITY);
+      if (reachedEnd) scorer.advance(Number.POSITIVE_INFINITY);
       const all = [...scorer.results];
       const sum = summarize(tl, all);
       setResults(all);
@@ -379,6 +390,10 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       runConfigRef.current = { step, bpm, originalBpm };
       setResults([]);
       setSummary(null);
+      pausedRef.current = false;
+      setPaused(false);
+      navigatedRef.current = false;
+      setResumeAtMs(null);
       onUpdateSettings({ playAlongLatencyMs: latencyMs });
 
       const ok = await backing.start();
@@ -386,6 +401,10 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       setPhase('playing');
 
       const loop = () => {
+        if (pausedRef.current) {
+          rafRef.current = requestAnimationFrame(loop);
+          return;
+        }
         backing.sync();
         const songMs = backing.songMs(performance.now(), latencyRef.current) ?? 0;
         const fresh = scorerRef.current?.advance(songMs) ?? [];
@@ -433,6 +452,88 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     [onUpdateSettings],
   );
 
+  // ---- Pause & navigation in the chart (keyboard: Space, ← → ↑ ↓) ----
+  const showCursor = (index: number) => {
+    const tl = timelineRef.current;
+    if (!tl || !tl.chords.length) return;
+    const i = Math.max(0, Math.min(index, tl.chords.length - 1));
+    cursorRef.current = i;
+    setCursor(i);
+    const at = tl.chords[i].startMs;
+    setClock({ index: i, beat: Math.floor(at / tl.beatMs), songMs: at });
+  };
+  const pauseRun = () => {
+    const tl = timelineRef.current;
+    if (pausedRef.current || !tl) return;
+    pausedRef.current = true;
+    setPaused(true);
+    setResumeAtMs(null);
+    backingRef.current?.pause();
+    showCursor(Math.max(0, clock.index));
+  };
+  /** Moves the cursor by chords (←/→) or by lines of the chart (↑/↓). */
+  const moveCursor = (by: 'chord' | 'line', dir: 1 | -1) => {
+    const tl = timelineRef.current;
+    if (!tl) return;
+    if (!pausedRef.current) pauseRun();
+    navigatedRef.current = true;
+    const here = tl.chords[cursorRef.current];
+    if (by === 'chord') {
+      showCursor(cursorRef.current + dir);
+      return;
+    }
+    // Same place one line (barsPerRow bars) up or down: first chord of that bar.
+    const target = (here.chorus * tl.formBars + here.formBar) + dir * barsPerRow;
+    const clamped = Math.max(0, Math.min(target, tl.choruses * tl.formBars - 1));
+    const i = tl.chords.findIndex((t) => t.chorus * tl.formBars + t.formBar >= clamped);
+    showCursor(i < 0 ? tl.chords.length - 1 : i);
+  };
+  const resumeRun = async () => {
+    const tl = timelineRef.current;
+    const backing = backingRef.current;
+    if (!pausedRef.current || !tl || !backing) return;
+    const i = cursorRef.current;
+    scorerRef.current?.seek(i);
+    setResults((prev) => prev.filter((r) => r.index < i));
+    const at = tl.chords[i].startMs;
+    setResumeAtMs(at);
+    pausedRef.current = false;
+    setPaused(false);
+    await backing.resumeAt(at, tl.barMs, tl.beatsPerBar);
+  };
+
+  /** Back to the very first chord: a fresh attempt from the top (it can validate again). */
+  const restartRun = () => {
+    if (!timelineRef.current) return;
+    if (!pausedRef.current) pauseRun();
+    showCursor(0);
+    navigatedRef.current = false;
+    void resumeRun();
+  };
+
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    const onKey = (e: KeyboardEvent) => {
+      const keys: Record<string, () => void> = {
+        KeyR: restartRun,
+        Space: () => (pausedRef.current ? void resumeRun() : pauseRun()),
+        ArrowLeft: () => moveCursor('chord', -1),
+        ArrowRight: () => moveCursor('chord', 1),
+        ArrowUp: () => moveCursor('line', -1),
+        ArrowDown: () => moveCursor('line', 1),
+      };
+      const action = keys[e.code];
+      if (!action) return;
+      // Ours: no page scroll, no focused button pressed, no piano key.
+      e.preventDefault();
+      e.stopPropagation();
+      if ((e.code === 'Space' || e.code === 'KeyR') && e.repeat) return;
+      action();
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  });
+
   const formBarsCount = chart?.bars.length ?? 0;
   const availableChoruses =
     midiInfo && formBarsCount > 0
@@ -457,7 +558,8 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
 
   // Lead-sheet line of 4 bars around the current position, from the clock
   // (a held chord can span many bars).
-  const barGlobal = timeline ? Math.max(0, Math.floor((clock.songMs - timeline.formStartMs) / timeline.barMs)) : 0;
+  // + a hair: a cursor placed exactly on a barline must not read as the bar before (2 − 1e-12).
+  const barGlobal = timeline ? Math.max(0, Math.floor((clock.songMs - timeline.formStartMs) / timeline.barMs + 1e-6)) : 0;
   const formBar = timeline ? barGlobal % timeline.formBars : 0;
   const chorus = timeline ? Math.min(timeline.choruses - 1, Math.floor(barGlobal / timeline.formBars)) : 0;
   // Whole chart on screen: 4 bars per line like a lead sheet, 8 for long forms.
@@ -477,6 +579,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
 
   const advice = (() => {
     if (!summary || summary.total === 0) return 'Aucun accord n’a été joué : relancez quand vous êtes prêt.';
+    if (!completedRun && navigatedRef.current) {
+      return 'Bon entraînement ! Vous avez navigué dans la grille, donc ce passage ne valide pas l’objectif : rejouez le morceau d’une traite pour le valider.';
+    }
     if (!completedRun) {
       return `Arrêté après ${summary.total} accord${summary.total > 1 ? 's' : ''}. Ces résultats sont enregistrés, mais seul un morceau joué jusqu’au bout compte pour la compétence « Jouer en rythme ».`;
     }
@@ -738,13 +843,22 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
               <div className="flex w-full items-center gap-3" aria-live="polite">
                 <Mascot size={44} mood={mood} className="hidden shrink-0 sm:block" />
                 <p className="font-display text-lg font-semibold text-muted">
-                  {inCountIn
+                  {paused
+                    ? `En pause · mesure ${formBar + 1}/${timeline.formBars}`
+                    : resumeAtMs !== null && clock.songMs < resumeAtMs
+                      ? 'Reprise : une mesure de métronome…'
+                      : inCountIn
                     ? countInBeatsLeft > timeline.beatsPerBar
                       ? `Intro : écoutez, la grille arrive dans ${Math.ceil(countInBeatsLeft / timeline.beatsPerBar)} mesures`
                       : 'Préparez-vous…'
                     : `Mesure ${formBar + 1}/${timeline.formBars}`}
                 </p>
-                {inCountIn && countInBeatsLeft <= timeline.beatsPerBar && (
+                {paused && (
+                  <span className="hidden text-sm font-bold text-muted lg:inline">
+                    Espace : reprendre · ← → accord · ↑ ↓ ligne · R : début
+                  </span>
+                )}
+                {!paused && inCountIn && countInBeatsLeft <= timeline.beatsPerBar && (
                   <span key={countInBeatsLeft} className="mb-pop font-display text-4xl leading-none font-bold text-brass">
                     {countInBeatsLeft}
                   </span>
@@ -789,7 +903,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                       key={barNumber}
                       data-testid={isCurrent ? 'playalong-current-bar' : undefined}
                       className={`relative flex min-h-0 items-center rounded-xl border-2 px-2 pb-1.5 transition-all duration-150 sm:px-3 ${
-                        isCurrent
+                        isCurrent && paused
+                          ? 'z-10 scale-[1.03] border-brass bg-brass/20 shadow-[0_4px_0_var(--color-brass-press)]'
+                          : isCurrent
                           ? 'z-10 scale-[1.03] border-sky bg-sky/10 shadow-[0_4px_0_var(--color-sky-press)]'
                           : isNextUp
                             ? 'border-brass'
@@ -815,7 +931,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                         })}
                         {!written && items.length === 0 && <span className="font-display text-lg text-muted">%</span>}
                       </div>
-                      {isCurrent && (
+                      {isCurrent && !paused && (
                         <div className="absolute inset-x-2 bottom-[3px] flex gap-1" aria-hidden="true">
                           {Array.from({ length: timeline.beatsPerBar }).map((_, b) => (
                             <span key={b} className={`h-1 flex-1 rounded-full ${b <= beatInBar ? 'bg-brass' : 'bg-line'}`} />
@@ -930,6 +1046,20 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
             >
               <Play className="h-5 w-5 fill-current" />
               {phase === 'loading' ? 'Chargement de l’orchestre…' : 'Commencer'}
+            </button>
+          )}
+          {phase === 'playing' && (
+            <span className="mr-auto hidden text-sm font-bold text-muted md:inline">
+              Espace : pause · flèches : se déplacer · R : recommencer
+            </span>
+          )}
+          {phase === 'playing' && (
+            <button
+              type="button"
+              onClick={() => (paused ? void resumeRun() : pauseRun())}
+              className={`mb-btn ${paused ? 'mb-btn-green' : 'mb-btn-ghost'}`}
+            >
+              {paused ? 'Reprendre' : 'Pause'}
             </button>
           )}
           {phase === 'playing' && (

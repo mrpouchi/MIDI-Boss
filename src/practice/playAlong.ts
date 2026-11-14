@@ -195,6 +195,19 @@ export class PlayAlongScorer {
     this.held.delete(note);
   }
 
+  /**
+   * Restarts scoring at chord `index` (after the learner navigated in the
+   * chart): results from there on are forgotten so those chords are judged
+   * again; chords skipped forward are simply not judged.
+   */
+  seek(index: number): void {
+    const i = Math.max(0, Math.min(index, this.timeline.chords.length));
+    this.nextToClose = i;
+    for (let k = i; k < this.windows.length; k++) this.windows[k] = { hitMs: null, wrongNote: false, struck: new Set<number>() };
+    for (let k = this.results.length - 1; k >= 0; k--) if (this.results[k].index >= i) this.results.splice(k, 1);
+    this.held.clear();
+  }
+
   /** Closes every chord whose window has ended by `songMs`; returns the new results. */
   advance(songMs: number): ChordResult[] {
     const fresh: ChordResult[] = [];

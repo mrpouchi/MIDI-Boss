@@ -208,7 +208,12 @@ export class BandSequencer {
     if (ch) ch.gain.gain.setTargetAtTime(volume, this.ctx.currentTime, 0.02);
   }
 
-  async start(): Promise<boolean> {
+  /**
+   * Starts at `fromS` seconds into the file (0 = the beginning). `preRollS`
+   * seconds of silence come first (for metronome clicks set with setClicks,
+   * at file times just before `fromS`). Notes before `fromS` are skipped.
+   */
+  async start(fromS = 0, preRollS = 0): Promise<boolean> {
     if (!this.schedule) return false;
     if (this.ctx.state !== 'running') {
       try {
@@ -218,9 +223,13 @@ export class BandSequencer {
       }
     }
     if (this.ctx.state !== 'running') return false;
-    this.next = 0;
+    const notes = this.schedule.notes;
+    let first = 0;
+    while (first < notes.length && notes[first].time < fromS - 0.001) first++;
+    this.next = first;
     this.nextClick = 0;
-    this.startAt = this.ctx.currentTime + 0.12;
+    while (this.nextClick < this.clicks.length && this.clicks[this.nextClick].time < fromS - preRollS - 0.001) this.nextClick++;
+    this.startAt = this.ctx.currentTime + 0.12 + preRollS - fromS;
     this.pump();
     this.timer = window.setInterval(() => this.pump(), TICK_MS);
     return true;

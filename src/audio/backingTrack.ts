@@ -77,6 +77,29 @@ export class BackingTrack {
     return ok;
   }
 
+  /** Stops the band where it is (resume with resumeAt). */
+  pause(): void {
+    this.anchors = [];
+    this.startedAt = null;
+    this.band.stop();
+  }
+
+  /**
+   * Plays again from `songMs`, after one bar of metronome clicks so the
+   * learner can find the pulse (`barMs`, `beatsPerBar` from the timeline).
+   */
+  async resumeAt(songMs: number, barMs: number, beatsPerBar: number): Promise<boolean> {
+    const fromS = songMs / 1000;
+    const barS = barMs / 1000;
+    this.band.setClicks(
+      Array.from({ length: beatsPerBar }, (_, b) => ({ time: fromS - barS + (b * barS) / beatsPerBar, accent: b === 0 })),
+    );
+    this.anchors = [];
+    const ok = await this.band.start(fromS, barS);
+    this.startedAt = performance.now() + barS * 1000 - songMs;
+    return ok;
+  }
+
   async stop(): Promise<void> {
     this.startedAt = null;
     this.band.stop();

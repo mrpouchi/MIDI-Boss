@@ -76,6 +76,19 @@ describe('PlayAlongScorer', () => {
     expect(s.results[0].offsetMs).toBe(70); // completed by the 4th note
   });
 
+  it('judges a passage again after seeking back, and skips chords jumped over', () => {
+    const s = new PlayAlongScorer(tl, opts);
+    s.advance(6000); // Cm7 and its repeat missed
+    expect(s.results.map((r) => r.verdict)).toEqual(['missed', 'missed']);
+    s.seek(0); // back to the start of the chart
+    expect(s.results).toHaveLength(0);
+    play(s, CM7, 2040);
+    s.seek(2); // jump forward to Fm7: the repeat bar is not judged
+    play(s, FM7, 6020);
+    s.advance(8000 - 250);
+    expect(s.results.map((r) => [r.index, r.verdict])).toEqual([[2, 'on-time']]);
+  });
+
   it('counts a bar as missed when the chord is only held, not played again', () => {
     const s = new PlayAlongScorer(tl, opts);
     CM7.forEach((n, k) => s.noteOn(n, 2000 + k)); // struck once, held through bar 2
