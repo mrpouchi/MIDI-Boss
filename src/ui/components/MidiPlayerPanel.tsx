@@ -1,6 +1,7 @@
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { LOCAL_SONG_FILES, LocalSongFile } from '../../content/localSongs';
 import MidiAudioPlayer from 'midi-audio-player';
+import { installJazzKit } from '../../audio/jazzKit';
 import { FileAudio, Pause, Play, Square, Volume2 } from 'lucide-react';
 import { StoredMidiSetup } from '../../storage/types';
 import {
@@ -78,6 +79,7 @@ export function MidiPlayerPanel({ savedSetups, onSaveSetup }: MidiPlayerPanelPro
   // Chrome are allowed to create the Web Audio context.
   const createPlayer = () => {
     const player = new MidiAudioPlayer({ volume: 0.8, reverb: 0.16, preferred: ['FluidR3_GM'] });
+    installJazzKit(player);
     player.on('computed', (data) => setTempo(Math.round(data.tempo)));
     player.on('endOfFile', () => setStatus('ready'));
     return player;

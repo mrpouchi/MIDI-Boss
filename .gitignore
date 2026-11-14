@@ -10,3 +10,4 @@ coverage/
 # Personal MIDI files (copyrighted songs): kept on this machine only.
 local-songs/*
 !local-songs/README.md
+*.tsbuildinfo

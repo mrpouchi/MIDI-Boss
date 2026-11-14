@@ -107,10 +107,11 @@ export function midiSetupKey(fileName: string, buffer: ArrayBuffer) {
   return `${fileName}:${bytes.length}:${(hash >>> 0).toString(36)}`;
 }
 
-// Le catalogue ne contient pas de banque FluidR3_GM : sans preset explicite,
-// le canal 10 tombe sur 1280_AirFont380 (banque « midis cm-64 ») dont le
-// mapping de percussions n'est pas General MIDI (ride -> sifflet).
-export const DRUM_KIT_PRESET = '1289_FluidR3'; // Kit « Jazz » General MIDI de FluidR3
+// Sans preset explicite, le canal 10 tombe sur 1280_AirFont380 (banque « midis
+// cm-64 ») dont le mapping n'est pas General MIDI (ride -> sifflet). On utilise
+// un kit maison : le kit Jazz de FluidR3 avec un vrai ride (voir jazzKit.ts) ;
+// le lecteur doit être préparé avec installJazzKit().
+export { JAZZ_KIT_ID as DRUM_KIT_PRESET } from './jazzKit';
 export const DRUM_CHANNEL = 10;
 
 
@@ -179,4 +180,44 @@ export function analyzeMidi(buffer: ArrayBuffer): MidiAnalysis {
     firstMusicBar: Number.isFinite(firstMusicTick) ? Math.floor(firstMusicTick / ticksPerBar) : 0,
     pianoChannels: [...pianoChannels],
   };
+}
+
+/**
+ * Keeps only the first `bars` bars of the file (count-in included): later
+ * events are dropped and notes still sounding are released at the cut, so the
+ * band plays e.g. a single chorus instead of the whole export.
+ */
+export function truncateMidiToBars(buffer: ArrayBuffer, bars: number): ArrayBuffer {
+  const parsed = parseMidi(new Uint8Array(buffer));
+  const tpb = parsed.header.ticksPerBeat ?? 480;
+  const beatsPerBar = analyzeMidi(buffer).beatsPerBar;
+  const limit = Math.round(bars * beatsPerBar * tpb);
+  parsed.tracks = parsed.tracks.map((track) => {
+    const kept: { tick: number; event: (typeof track)[number] }[] = [];
+    const sounding = new Map<string, { channel: number; noteNumber: number }>();
+    let tick = 0;
+    for (const event of track) {
+      tick += event.deltaTime;
+      if (event.type === 'endOfTrack') continue;
+      const isNote = event.type === 'noteOn' || event.type === 'noteOff';
+      if (tick >= limit && !(isNote && event.type === 'noteOff' && tick === limit)) continue;
+      if (event.type === 'noteOn' && event.velocity > 0) {
+        sounding.set(`${event.channel}:${event.noteNumber}`, { channel: event.channel, noteNumber: event.noteNumber });
+      } else if (isNote) {
+        sounding.delete(`${event.channel}:${event.noteNumber}`);
+      }
+      kept.push({ tick, event });
+    }
+    for (const { channel, noteNumber } of sounding.values()) {
+      kept.push({ tick: limit, event: { deltaTime: 0, type: 'noteOff', channel, noteNumber, velocity: 0 } });
+    }
+    kept.push({ tick: limit, event: { deltaTime: 0, meta: true, type: 'endOfTrack' } });
+    let previous = 0;
+    return kept.map(({ tick: t, event }) => {
+      const out = { ...event, deltaTime: t - previous };
+      previous = t;
+      return out;
+    });
+  });
+  return new Uint8Array(writeMidi(parsed)).buffer;
 }

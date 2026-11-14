@@ -101,6 +101,19 @@ artificielle** (pas d’XP, pièces, séries), aucune fausse donnée.
   être refrappées (tenir ne compte pas) ; sur un vrai changement, les notes communes peuvent rester tenues.
   Le retard / l’avance se mesurent sur ces attaques. La mesure courante est calculée depuis l’horloge.
 
+### Orchestre : durée et son de batterie (14 novembre 2026)
+
+- **Tours de grille** : l’écran orchestre propose « 1 tour / 2 tours / Tout », avec la durée réelle au tempo
+  choisi. La valeur par défaut est 1 tour : So What dure 1 min 17 à 100 BPM, au lieu de 3 min 50. Le MIDI est coupé
+  à la fin du dernier tour par `truncateMidiToBars` (`audio/midiFile.ts`), qui relâche les notes encore tenues.
+- **Ride** : le kit Jazz de FluidR3 a un ride aigu et court (centroïde spectral ~6,2 kHz), qui sonne comme un
+  charleston. `audio/jazzKit.ts` construit un kit maison, `midiboss_jazz_kit` : les zones FluidR3, avec le ride
+  (notes 51 et 59) remplacé par celui de GeneralUser GS, plus sombre (~3,9 kHz) et qui résonne environ 2,5 s.
+  - `installJazzKit(player)` enveloppe `findPreset` et `getPreset` de l’instance `midi-audio-player`.
+  - Le kit GeneralUser GS complet est inutilisable : ses zones « fourre-tout » (0–127) écrasent la grosse caisse,
+    la caisse claire et le charleston, car le lecteur prend la **dernière** zone qui couvre une note.
+  - Ces mesures ont été faites hors navigateur. Je n’ai pas écouté le résultat : c’est à valider à l’oreille.
+
 ### Prochaines étapes
 
 Phase B du plan : étendre la théorie (dim, m7b5…), format de chanson réel (Blue Bossa), objectifs de chanson

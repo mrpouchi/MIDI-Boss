@@ -1,7 +1,7 @@
 import { Play, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackingTrack } from '../../audio/backingTrack';
-import { analyzeMidi } from '../../audio/midiFile';
+import { MidiAnalysis, analyzeMidi } from '../../audio/midiFile';
 import { pianoSynth } from '../../audio/synth';
 import { LocalSongFile } from '../../content/localSongs';
 import { NoteEventListener } from '../../input/types';
@@ -51,6 +51,13 @@ interface PlayAlongScreenProps {
   objective?: { song: PathSong; objective: SongObjective };
 }
 
+function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return m > 0 ? `${m} min ${String(sec).padStart(2, '0')}` : `${sec} s`;
+}
+
 type Phase = 'setup' | 'loading' | 'playing' | 'done';
 
 const TEMPO_LEVELS: TempoLevel[] = ['slow', 'medium', 'original'];
@@ -89,6 +96,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   const [step, setStep] = useState<VoicingStep>(goal?.objective.step ?? 'root');
   const [tempoLevel, setTempoLevel] = useState<TempoLevel>(goal?.objective.tempo ?? 'slow');
   const [originalBpm, setOriginalBpm] = useState<number | null>(null);
+  const [midiInfo, setMidiInfo] = useState<MidiAnalysis | null>(null);
+  /** Passes through the form: one is enough to practise, the full export can be long. */
+  const [chorusChoice, setChorusChoice] = useState(1);
   const midiBufferRef = useRef<ArrayBuffer | null>(null);
   const [lastRun, setLastRun] = useState<PlayAlongRun | null>(null);
   const [pianoGuide, setPianoGuide] = useState(false);
@@ -123,7 +133,9 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       .then((buffer) => {
         if (!alive) return;
         midiBufferRef.current = buffer;
-        setOriginalBpm(analyzeMidi(buffer).bpm);
+        const info = analyzeMidi(buffer);
+        setMidiInfo(info);
+        setOriginalBpm(info.bpm);
       })
       .catch((e: unknown) => alive && setError(`Impossible de lire ${localSong.fileName} : ${e instanceof Error ? e.message : String(e)}`));
     return () => {
@@ -248,17 +260,23 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     try {
       const buffer = midiBufferRef.current.slice(0);
       const bpm = resolveTempo(tempoLevel, originalBpm);
-      const analysis = await backing.load(buffer, { bpm, pianoGuideVolume: pianoGuide ? 0.35 : 0 });
       const formBars = chart.bars.length;
-      const countInBars = analysis.firstMusicBar;
-      const exact = (analysis.totalBars - countInBars) / formBars;
-      const choruses = Math.max(1, Math.floor(exact + 0.1));
-      if (chart.unsupportedJumps.length > 0 || Math.abs(exact - choruses) > 0.25) {
+      const info = analyzeMidi(buffer);
+      const countInBars = info.firstMusicBar;
+      const exact = (info.totalBars - countInBars) / formBars;
+      const available = Math.max(1, Math.floor(exact + 0.1));
+      const choruses = Math.min(chorusChoice, available);
+      const analysis = await backing.load(buffer, {
+        bpm,
+        pianoGuideVolume: pianoGuide ? 0.35 : 0,
+        bars: choruses < available ? countInBars + choruses * formBars : undefined,
+      });
+      if (chart.unsupportedJumps.length > 0 || Math.abs(exact - available) > 0.25) {
         setFormWarning(
           `La grille iReal (${formBars} mesures) ne tombe pas juste avec le MIDI (${analysis.totalBars - countInBars} mesures après le décompte) : certains accords peuvent être décalés.`,
         );
       }
-      const tl = buildTimeline(chart, { bpm, countInBars, choruses });
+      const tl = buildTimeline(chart, { bpm, countInBars: analysis.firstMusicBar, choruses });
       timelineRef.current = tl;
       setTimeline(tl);
       scorerRef.current = new PlayAlongScorer(tl, defaultScorerOptions(tl, step));
@@ -292,6 +310,16 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
       void backing.dispose();
     }
   };
+
+  const formBarsCount = chart?.bars.length ?? 0;
+  const availableChoruses =
+    midiInfo && formBarsCount > 0
+      ? Math.max(1, Math.floor((midiInfo.totalBars - midiInfo.firstMusicBar) / formBarsCount + 0.1))
+      : 1;
+  const chorusSeconds =
+    midiInfo && originalBpm !== null && formBarsCount > 0
+      ? (formBarsCount * midiInfo.beatsPerBar * 60) / resolveTempo(tempoLevel, originalBpm)
+      : null;
 
   const current = timeline && clock.index >= 0 ? timeline.chords[clock.index] : null;
   const next = timeline ? timeline.chords[Math.max(0, clock.index + 1)] : null;
@@ -443,6 +471,26 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                   ))}
                 </div>
               </fieldset>
+
+              {availableChoruses > 1 && (
+                <fieldset className="mt-5">
+                  <legend className="font-display text-lg font-semibold">Tours de grille</legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[...new Set([1, 2, availableChoruses])].filter((n) => n <= availableChoruses).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        aria-pressed={chorusChoice === n}
+                        onClick={() => setChorusChoice(n)}
+                        className={`mb-btn mb-btn-sm ${chorusChoice === n ? 'mb-btn-sky' : 'mb-btn-ghost'}`}
+                      >
+                        {n === 1 ? '1 tour' : n === availableChoruses ? `Tout (${n} tours)` : `${n} tours`}
+                        {chorusSeconds !== null ? ` · ${formatDuration(chorusSeconds * n)}` : ''}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               <div className="mt-5 space-y-3">
                 <label className="flex items-center gap-3 font-bold">

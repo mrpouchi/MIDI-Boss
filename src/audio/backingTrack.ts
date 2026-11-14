@@ -7,13 +7,17 @@ import {
   describeTracks,
   prepareDrumMapping,
   setMidiTempo,
+  truncateMidiToBars,
 } from './midiFile';
+import { installJazzKit } from './jazzKit';
 
 export interface BackingOptions {
   /** Playback tempo; the file is rewritten so the band really plays at this speed. */
   bpm: number;
   /** Volume (0..1) of the file's own piano part: 0 = the learner is the pianist. */
   pianoGuideVolume: number;
+  /** Play only this many bars from the start (count-in included); the rest is cut. */
+  bars?: number;
 }
 
 /**
@@ -31,6 +35,7 @@ export class BackingTrack {
   /** Must be called from a user gesture so the browser allows audio. */
   constructor() {
     this.player = new MidiAudioPlayer({ volume: 0.85, reverb: 0.14, preferred: ['FluidR3_GM'] });
+    installJazzKit(this.player);
     this.player.on('computed', (data) => {
       this.durationS = data.duration;
     });
@@ -41,6 +46,7 @@ export class BackingTrack {
     const tracks = describeTracks(original);
     let buffer = prepareDrumMapping(original, true).buffer;
     if (Math.abs(analysis.bpm - opts.bpm) > 0.01) buffer = setMidiTempo(buffer, opts.bpm);
+    if (opts.bars !== undefined && opts.bars < analysis.totalBars) buffer = truncateMidiToBars(buffer, opts.bars);
 
     const presets: Record<string, string> = {};
     if (tracks.some((t) => t.channel === DRUM_CHANNEL)) presets[String(DRUM_CHANNEL)] = DRUM_KIT_PRESET;
