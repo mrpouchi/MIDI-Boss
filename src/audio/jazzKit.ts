@@ -4,13 +4,20 @@ import MidiAudioPlayer from 'midi-audio-player';
  * Drum kit used for iReal exports: FluidR3's "Jazz" kit, whose ride is thin and
  * bright (it reads like a hi-hat), with the ride replaced by GeneralUser GS's
  * darker, longer-ringing ride (measured: spectral centroid ~3.9 kHz vs ~6.2 kHz,
- * rings ~2.5 s). GeneralUser's own kit can't be used as is: its WebAudioFont
+ * rings ~2.5 s), copied on every ride voice key. GeneralUser's own kit can't be used as is: its WebAudioFont
  * conversion has catch-all zones that override kick, snare and hi-hat.
  */
 export const JAZZ_KIT_ID = 'midiboss_jazz_kit';
 const BASE_KIT = '1289_FluidR3';
 const RIDE_SOURCE = '1284_GeneralUserGS';
-const RIDE_KEYS = [51, 59]; // ride 1, ride 2
+const RIDE_KEY = 51;
+/**
+ * Keys that all play the same ride sample. The player cuts a voice when the
+ * same key is struck again, so prepareDrumMapping rotates successive ride hits
+ * over these keys and each one rings under the next (51 = ride; 59 and 90 are
+ * not used by iReal exports once converted).
+ */
+export const RIDE_VOICE_KEYS = [51, 59, 90];
 
 interface Zone {
   keyRangeLow: number;
@@ -25,18 +32,22 @@ interface Preset {
 
 const isOnlyKey = (z: Zone, key: number) => z.keyRangeLow === key && z.keyRangeHigh === key;
 
-/** Pure: base kit with its ride zones swapped for the source's dedicated ride zones. */
+/**
+ * Pure: base kit whose ride keys (RIDE_VOICE_KEYS) all play the source's ride
+ * sample, each copy re-centred so it sounds at its original pitch.
+ */
 export function buildJazzKit(base: Preset, rideSource: Preset): Preset {
-  const rides = RIDE_KEYS.flatMap((key) => {
-    const zone = rideSource.zones.find((z) => isOnlyKey(z, key));
-    return zone ? [{ key, zone }] : [];
-  });
-  const replaced = new Set(rides.map((r) => r.key));
-  // The player picks the LAST zone covering a key, so the new rides go at the end.
-  const zones = [
-    ...base.zones.filter((z) => ![...replaced].some((key) => isOnlyKey(z, key))),
-    ...rides.map((r) => r.zone),
-  ];
+  const ride = rideSource.zones.find((z) => isOnlyKey(z, RIDE_KEY));
+  if (!ride) return { ...base, id: JAZZ_KIT_ID };
+  const fine = typeof ride.originalPitch === 'number' ? ride.originalPitch - RIDE_KEY * 100 : 0;
+  const voices = RIDE_VOICE_KEYS.map((key) => ({
+    ...ride,
+    keyRangeLow: key,
+    keyRangeHigh: key,
+    originalPitch: key * 100 + fine,
+  }));
+  // The player picks the LAST zone covering a key, so the ride voices go at the end.
+  const zones = [...base.zones.filter((z) => !RIDE_VOICE_KEYS.some((key) => isOnlyKey(z, key))), ...voices];
   return { ...base, id: JAZZ_KIT_ID, zones };
 }
 

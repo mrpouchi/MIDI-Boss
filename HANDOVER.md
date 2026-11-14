@@ -113,6 +113,14 @@ artificielle** (pas d’XP, pièces, séries), aucune fausse donnée.
   - Le kit GeneralUser GS complet est inutilisable : ses zones « fourre-tout » (0–127) écrasent la grosse caisse,
     la caisse claire et le charleston, car le lecteur prend la **dernière** zone qui couvre une note.
   - Ces mesures ont été faites hors navigateur. Je n’ai pas écouté le résultat : c’est à valider à l’oreille.
+- **Cause principale du ride « charleston »** : les exports iReal relâchent chaque coup de batterie au bout
+  d’environ 90 ticks (moins d’une double-croche), parfois 0 tick pour la caisse claire. De son côté,
+  `midi-audio-player` coupe l’échantillon au note-off, et aussi quand la même touche est rejouée.
+  `prepareDrumMapping` corrige ça :
+  - il supprime les note-off du canal 10 (batterie en one-shot) ;
+  - il fait tourner les coups de ride sur `RIDE_VOICE_KEYS` (51, 59, 90). Ces trois touches jouent le même
+    échantillon dans le kit maison, ce qui laisse chaque coup résonner sous le suivant (2 s au maximum, une
+    limite du lecteur).
 
 ### Prochaines étapes
 

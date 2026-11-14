@@ -1,4 +1,5 @@
 import { parseMidi, writeMidi } from 'midi-file';
+import { RIDE_VOICE_KEYS } from './jazzKit';
 
 /**
  * Pure MIDI-file helpers shared by the MIDI player and the play-along mode.
@@ -59,27 +60,41 @@ export function looksLikeIRealExport(parsed: ParsedMidi) {
   return hasDrumNotes && ['piano', 'harmony', 'drums'].every((name) => names.has(name));
 }
 
+/**
+ * Fixes an iReal Pro export for a General MIDI player:
+ * 1. drum keys converted from iReal's private map to General MIDI;
+ * 2. drum note-offs removed: drums are one-shot. iReal releases every hit
+ *    after ~0.1 s (sometimes 0 ticks), and this player stops the sample at
+ *    note-off, which chokes the ride into a hi-hat and silences some snares;
+ * 3. ride hits rotated over RIDE_VOICE_KEYS so the cymbal keeps ringing.
+ */
 export function prepareDrumMapping(buffer: ArrayBuffer, remap: boolean) {
   const parsed = parseMidi(new Uint8Array(buffer));
   const iReal = looksLikeIRealExport(parsed);
   if (!iReal || !remap) return { iReal, buffer };
 
-  let changed = false;
-  for (const track of parsed.tracks) {
+  let rideHit = 0;
+  parsed.tracks = parsed.tracks.map((track) => {
+    let tick = 0;
+    let previous = 0;
+    const out: typeof track = [];
     for (const event of track) {
-      if (
-        (event.type === 'noteOn' || event.type === 'noteOff') &&
-        event.channel === 9
-      ) {
-        const mapped = IREAL_DRUM_TO_GM[event.noteNumber];
-        if (mapped !== undefined && mapped !== event.noteNumber) {
-          event.noteNumber = mapped;
-          changed = true;
+      tick += event.deltaTime;
+      if ((event.type === 'noteOn' || event.type === 'noteOff') && event.channel === 9) {
+        const isHit = event.type === 'noteOn' && event.velocity > 0;
+        if (!isHit) continue; // one-shot drums: drop the release
+        let key = IREAL_DRUM_TO_GM[event.noteNumber] ?? event.noteNumber;
+        if (key === RIDE_VOICE_KEYS[0]) {
+          key = RIDE_VOICE_KEYS[rideHit % RIDE_VOICE_KEYS.length];
+          rideHit += 1;
         }
+        event.noteNumber = key;
       }
+      out.push({ ...event, deltaTime: tick - previous });
+      previous = tick;
     }
-  }
-  if (!changed) return { iReal, buffer };
+    return out;
+  });
   return { iReal, buffer: new Uint8Array(writeMidi(parsed)).buffer };
 }
 

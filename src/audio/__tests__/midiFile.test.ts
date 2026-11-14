@@ -1,7 +1,7 @@
 import { parseMidi, writeMidi } from 'midi-file';
 import { describe, expect, it } from 'vitest';
-import { analyzeMidi, setMidiTempo, truncateMidiToBars } from '../midiFile';
-import { JAZZ_KIT_ID, buildJazzKit } from '../jazzKit';
+import { analyzeMidi, prepareDrumMapping, setMidiTempo, truncateMidiToBars } from '../midiFile';
+import { JAZZ_KIT_ID, RIDE_VOICE_KEYS, buildJazzKit } from '../jazzKit';
 
 // A tiny iReal-like file: 1 count-in bar of clicks, then piano + bass from bar 2.
 function makeMidi(): ArrayBuffer {
@@ -81,12 +81,56 @@ describe('truncateMidiToBars', () => {
 });
 
 describe('buildJazzKit', () => {
-  const zone = (low: number, high: number, tag: string) => ({ keyRangeLow: low, keyRangeHigh: high, tag });
-  it('swaps only the ride zones and puts the new ride last (the player picks the last match)', () => {
-    const base = { id: 'base', zones: [zone(35, 35, 'kick'), zone(51, 51, 'thin-ride'), zone(51, 51, 'thin-ride-2'), zone(42, 42, 'hat')] };
-    const source = { id: 'src', zones: [zone(51, 51, 'dark-ride'), zone(0, 127, 'catch-all'), zone(35, 35, 'other-kick')] };
+  const zone = (low: number, high: number, tag: string, originalPitch = low * 100) => ({ keyRangeLow: low, keyRangeHigh: high, tag, originalPitch });
+  it('puts the dark ride on every ride voice key, last, at its original pitch', () => {
+    const base = { id: 'base', zones: [zone(35, 35, 'kick'), zone(51, 51, 'thin-ride'), zone(59, 59, 'thin-ride-2'), zone(42, 42, 'hat')] };
+    const source = { id: 'src', zones: [zone(51, 51, 'dark-ride', 5110), zone(0, 127, 'catch-all'), zone(35, 35, 'other-kick')] };
     const kit = buildJazzKit(base, source);
     expect(kit.id).toBe(JAZZ_KIT_ID);
-    expect(kit.zones.map((z) => z.tag)).toEqual(['kick', 'hat', 'dark-ride']);
+    expect(kit.zones.map((z) => z.tag)).toEqual(['kick', 'hat', 'dark-ride', 'dark-ride', 'dark-ride']);
+    expect(kit.zones.slice(2).map((z) => [z.keyRangeLow, z.originalPitch])).toEqual(
+      RIDE_VOICE_KEYS.map((k) => [k, k * 100 + 10]),
+    );
+  });
+});
+
+describe('prepareDrumMapping', () => {
+  function irealLike(): ArrayBuffer {
+    const named = (text: string) => ({ deltaTime: 0, meta: true as const, type: 'trackName' as const, text });
+    const end = { deltaTime: 0, meta: true as const, type: 'endOfTrack' as const };
+    const hit = (delta: number, note: number) => [
+      { deltaTime: delta, type: 'noteOn' as const, channel: 9, noteNumber: note, velocity: 80 },
+      { deltaTime: 90, type: 'noteOff' as const, channel: 9, noteNumber: note, velocity: 0 },
+    ];
+    return new Uint8Array(
+      writeMidi({
+        header: { format: 1, numTracks: 3, ticksPerBeat: 480 },
+        tracks: [
+          [named('Piano'), { deltaTime: 0, type: 'noteOn', channel: 0, noteNumber: 60, velocity: 80 }, { deltaTime: 480, type: 'noteOff', channel: 0, noteNumber: 60, velocity: 0 }, end],
+          [named('Harmony'), end],
+          [named('Drums'), ...hit(0, 71), ...hit(390, 71), ...hit(390, 71), ...hit(390, 71), ...hit(390, 44), end],
+        ],
+      }),
+    ).buffer;
+  }
+
+  it('maps iReal drums to GM, drops drum releases and rotates ride hits, keeping timing', () => {
+    const { iReal, buffer } = prepareDrumMapping(irealLike(), true);
+    expect(iReal).toBe(true);
+    const drums = parseMidi(new Uint8Array(buffer)).tracks[2];
+    let tick = 0;
+    const notes = drums.flatMap((e) => {
+      tick += e.deltaTime;
+      return e.type === 'noteOn' || e.type === 'noteOff' ? [[e.type, e.noteNumber, tick]] : [];
+    });
+    expect(notes).toEqual([
+      ['noteOn', 51, 0],
+      ['noteOn', 59, 480],
+      ['noteOn', 90, 960],
+      ['noteOn', 51, 1440],
+      ['noteOn', 44, 1920],
+    ]);
+    // Pitched parts are untouched.
+    expect(parseMidi(new Uint8Array(buffer)).tracks[0].filter((e) => e.type === 'noteOff')).toHaveLength(1);
   });
 });
