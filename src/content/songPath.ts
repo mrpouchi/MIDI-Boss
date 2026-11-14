@@ -132,6 +132,14 @@ export const SONG_PATH: PathUnit[] = [
     ],
   },
   {
+    id: 'minor-bossa',
+    title: 'La bossa mineure',
+    goal: 'Une bossa nova en do mineur : le II-V mineur et une première modulation.',
+    songs: [
+      song('blue-bossa', 'Blue Bossa', 'Bossa en do mineur : II-V mineur, puis un détour en ré bémol majeur.', ['m7♭5', 'II-V mineur', 'Modulation']),
+    ],
+  },
+  {
     id: 'blues',
     title: 'Le blues',
     goal: 'La forme de 12 mesures, la plus jouée du jazz.',
@@ -144,9 +152,8 @@ export const SONG_PATH: PathUnit[] = [
   {
     id: 'latin-minor',
     title: 'Couleurs mineures',
-    goal: 'Tonalités mineures, accord demi-diminué et valse.',
+    goal: 'Une valse mineure aux accords altérés.',
     songs: [
-      song('blue-bossa', 'Blue Bossa', 'II-V mineur et modulation en ré bémol.', ['m7♭5', 'II-V mineur', 'Modulation']),
       song('footprints', 'Footprints', 'Une valse mineure aux accords altérés.', ['Mesure à 3 temps', 'Accords altérés']),
     ],
   },
