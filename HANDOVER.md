@@ -532,3 +532,12 @@ Faire valider à l’utilisateur l’écoute du mixage restauré et de la batter
 - Nouveau MIDI Blue Bossa (160 BPM, 4/4, 63 mesures) : trompette, alto, trombone, guitare, basse, batterie, pas de piano. L'ancien export reste dans `~/Documents/eph/Blue Bossa.mid`.
 - Intro de 8 mesures retirée à la demande de l'utilisateur : la copie dans `local-songs/` est coupée (94 notes en moins, tempo et sons gardés au début), l'original reste dans `~/Documents/eph/Midi`. Le fichier commence donc sur la grille (`alignFormStart` = 0) : l'appli ajoute une mesure de décompte au métronome. 3 grilles complètes vérifiées (`alignedChoruses` = 3), puis une fin.
 - Parcours : nouvelle section 3 « La bossa mineure » (id `minor-bossa`) avec Blue Bossa, sortie de « Couleurs mineures », qui ne garde que Footprints.
+
+## Latence du clavier et instruments coupés (14 novembre 2026)
+
+- Mesures de la chaîne touche → son (Brave headless) :
+  - limiteur `DynamicsCompressorNode` : 6 ms de retard fixe (Chrome retarde l'entrée pour anticiper). Remplacé par un `WaveShaperNode` sans suréchantillonnage (`softClipCurve` : linéaire jusqu'à 0,6 puis courbe tanh vers 1), mesuré à 0 ms ;
+  - Salamander : 2 à 27 ms de silence au début de chaque échantillon (8 ms en médiane). Chaque région de `local-sounds/salamander/preset.json` a maintenant un `offset` (voir le README de `local-sounds/`) ; le dossier est ignoré par git, il faut refaire l'opération sur une autre machine ;
+  - boucle d'événements pendant le jeu : retard médian négligeable, 99e centile ~6 ms de plus qu'au repos, pic ~15 ms ;
+  - sortie audio : `latencyHint: 0`, `baseLatency` 2,7 ms (128 échantillons à 48 kHz). Le reste dépend du matériel : un casque Bluetooth ajoute 150 à 250 ms, rien à faire côté code.
+- Instruments coupés : bouton haut-parleur au début de chaque ligne de « Sons de l'orchestre ». Gardé par morceau dans `settings.bandMuted[songTitleKey]` (canaux 0–15), passé à `BackingOptions.muted` ; `BackingTrack.setMuted` agit en direct pendant « Écouter le morceau ».

@@ -23,6 +23,8 @@ export interface AppSettings {
   gestureChord?: number[];
   /** Band sounds chosen per song: song title key → MIDI channel (0–15) → sound id. */
   bandSounds?: Record<string, Record<string, string>>;
+  /** Band parts muted per song: song title key → MIDI channels (0–15). */
+  bandMuted?: Record<string, number[]>;
 }
 
 export interface ChordStat {

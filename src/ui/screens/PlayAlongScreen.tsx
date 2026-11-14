@@ -1,4 +1,4 @@
-import { Play, RotateCcw, Square, Volume2, X } from 'lucide-react';
+import { Play, RotateCcw, Square, Volume1, Volume2, VolumeX, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackingTrack } from '../../audio/backingTrack';
 import { MidiAnalysis, alignFormStart, alignedChoruses, analyzeMidi, describeTracks, normalizePickup, prependCountIn } from '../../audio/midiFile';
@@ -300,6 +300,13 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     const all = settings.bandSounds ?? {};
     onUpdateSettings({ bandSounds: { ...all, [songKey]: { ...(all[songKey] ?? {}), [String(channel)]: id } } });
   };
+  const mutedChannels = useMemo(() => settings.bandMuted?.[songKey] ?? [], [settings.bandMuted, songKey]);
+  const toggleMute = (channel: number) => {
+    const muted = !mutedChannels.includes(channel);
+    const next = muted ? [...mutedChannels, channel] : mutedChannels.filter((c) => c !== channel);
+    onUpdateSettings({ bandMuted: { ...(settings.bandMuted ?? {}), [songKey]: next } });
+    previewRef.current?.setMuted(channel, muted);
+  };
   const bandParts = useMemo(() => {
     if (!midiInfo || !midiBufferRef.current) return [];
     const clickChannels = describeTracks(midiBufferRef.current)
@@ -346,7 +353,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
     previewRef.current = band;
     setPreviewing('loading');
     try {
-      await band.load(run.buffer, { bpm: run.bpm, pianoGuideVolume: 0.8, bars: run.bars, sounds: songSounds });
+      await band.load(run.buffer, { bpm: run.bpm, pianoGuideVolume: 0.8, bars: run.bars, sounds: songSounds, muted: mutedChannels });
       if (previewRef.current !== band) return;
       await band.start();
       setPreviewing('playing');
@@ -385,6 +392,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
         pianoGuideVolume: pianoGuide ? 0.35 : 0,
         bars: run.bars,
         sounds: songSounds,
+        muted: mutedChannels,
         // Clear metronome clicks on the bar before the learner comes in.
         metronomeBar: countInBars >= 1 ? countInBars - 1 : undefined,
       });
@@ -873,9 +881,22 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                         const family = familyOf(part.program, part.channel);
                         const current = resolveSound(part.program, part.channel, songSounds[part.channel]);
                         const isGuide = midiInfo?.pianoChannels.includes(part.channel + 1) ?? false;
+                        const isMuted = mutedChannels.includes(part.channel);
                         return (
                           <li key={part.channel} className="flex items-center gap-2">
-                            <span className="w-32 shrink-0 truncate text-sm font-bold" title={isGuide ? 'Joué seulement en guide ou à l’écoute : pendant l’exercice, c’est vous le pianiste.' : undefined}>
+                            <button
+                              type="button"
+                              onClick={() => toggleMute(part.channel)}
+                              aria-pressed={isMuted}
+                              aria-label={`${isMuted ? 'Remettre' : 'Couper'} : ${partLabel(part.program, part.channel)}`}
+                              title={isMuted ? 'Coupé : cliquez pour le remettre' : 'Couper cet instrument'}
+                              className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl border-2 ${
+                                isMuted ? 'border-coral bg-coral/10 text-coral-press dark:text-coral' : 'border-line text-muted hover:text-text'
+                              }`}
+                            >
+                              {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume1 className="h-4 w-4" />}
+                            </button>
+                            <span className={`w-32 shrink-0 truncate text-sm font-bold ${isMuted ? 'text-muted line-through' : ''}`} title={isGuide ? 'Joué seulement en guide ou à l’écoute : pendant l’exercice, c’est vous le pianiste.' : undefined}>
                               {partLabel(part.program, part.channel)}
                               {isGuide && <span className="font-semibold text-muted"> (guide)</span>}
                             </span>
@@ -883,7 +904,8 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                               value={current.id}
                               onChange={(e) => chooseSound(part.channel, e.target.value)}
                               aria-label={`Son : ${partLabel(part.program, part.channel)}`}
-                              className="min-w-0 flex-1 rounded-xl border-2 border-line bg-surface px-2 py-1 text-sm font-semibold"
+                              disabled={isMuted}
+                              className="min-w-0 flex-1 disabled:opacity-50 rounded-xl border-2 border-line bg-surface px-2 py-1 text-sm font-semibold"
                             >
                               {SOUND_LIBRARY[family].map((o) => (
                                 <option key={o.id} value={o.id}>
@@ -905,7 +927,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                       })}
                     </ul>
                     <p className="mt-1 text-xs font-semibold text-muted">
-                      Choix gardé pour ce morceau. Avant d’entrer, la dernière mesure est battue au métronome.
+                      Choix gardé pour ce morceau, instruments coupés compris. Avant d’entrer, la dernière mesure est battue au métronome.
                     </p>
                   </section>
                 </div>

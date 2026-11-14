@@ -72,7 +72,24 @@ function midiToFrequency(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-/** Highest keyboard volume: 3 = 300 %. Above 100 % the limiter keeps it clean. */
+/**
+ * Soft clipper: linear below 0.6, then bends smoothly towards 1. Unlike a
+ * DynamicsCompressorNode (Chrome delays its input by 6 ms to look ahead),
+ * a WaveShaper without oversampling adds no latency.
+ */
+export function softClipCurve(size = 4096, linearUpTo = 0.6): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(size);
+  const room = 1 - linearUpTo;
+  for (let i = 0; i < size; i += 1) {
+    const x = (i / (size - 1)) * 2 - 1;
+    const a = Math.abs(x);
+    const y = a <= linearUpTo ? a : linearUpTo + room * Math.tanh((a - linearUpTo) / room);
+    curve[i] = Math.sign(x) * y;
+  }
+  return curve;
+}
+
+/** Highest keyboard volume: 3 = 300 %. Above 100 % the soft clipper keeps it clean. */
 export const MAX_AUDIO_VOLUME = 3;
 /** Master gain at 100 %, unchanged from before the boost existed. */
 const UNITY_GAIN = 0.45;
@@ -80,7 +97,7 @@ const UNITY_GAIN = 0.45;
 class PianoSynthEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private limiter: DynamicsCompressorNode | null = null;
+  private limiter: WaveShaperNode | null = null;
   private voices = new Map<number, ActiveVoice>();
   private sampledVoices = new Map<number, () => void>();
   private instrument: LoadedInstrument | null = null;
@@ -302,12 +319,9 @@ class PianoSynthEngine {
       this.masterGain.gain.value = this.volume * UNITY_GAIN;
       // Limiteur : transparent aux volumes normaux, il évite que le boost
       // (jusqu'à 300 %) sature quand on plaque un accord fort.
-      this.limiter = this.ctx.createDynamicsCompressor();
-      this.limiter.threshold.value = -3;
-      this.limiter.knee.value = 4;
-      this.limiter.ratio.value = 20;
-      this.limiter.attack.value = 0.002;
-      this.limiter.release.value = 0.12;
+      this.limiter = this.ctx.createWaveShaper();
+      this.limiter.curve = softClipCurve();
+      this.limiter.oversample = 'none';
       this.masterGain.connect(this.limiter);
       this.limiter.connect(this.ctx.destination);
     }

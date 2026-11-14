@@ -16,3 +16,9 @@ développement. Ce dossier est **ignoré par git** sauf ce README.
 Pour le régénérer : extraire l'archive d'origine, convertir avec ffmpeg
 (`-t <durée> -af afade=t=out -c:a libopus -b:a 128k`), puis reconstruire
 `preset.json` à partir du fichier `.sfz` (les `#` des noms deviennent `s`).
+
+Silence de tête : chaque échantillon commence par 2 à 27 ms de silence (8 ms
+en médiane). Chaque région de `preset.json` porte donc un `offset` (secondes)
+où la lecture démarre : le premier instant au-dessus de -40 dB sous le pic de
+l'échantillon, moins 1 ms de marge. Sans ces offsets, le piano répond plus
+tard au clavier.

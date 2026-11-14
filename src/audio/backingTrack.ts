@@ -23,6 +23,8 @@ export interface BackingOptions {
    * learner comes in. The file's own count-in clicks are then muted.
    */
   metronomeBar?: number;
+  /** Channels (0–15) the learner muted for this song. */
+  muted?: number[];
 }
 
 /**
@@ -35,6 +37,9 @@ export class BackingTrack {
   private anchors: number[] = [];
   private loop: LoopSpan | null = null;
   private startedAt: number | null = null;
+  /** Volume of each channel (0–15) when not muted. */
+  private channelVolumes = new Map<number, number>();
+  private muted = new Set<number>();
   analysis: MidiAnalysis | null = null;
 
   /** Must be called from a user gesture (or after one) so the browser allows audio. */
@@ -62,14 +67,30 @@ export class BackingTrack {
       const isPiano = analysis.pianoChannels.includes(track.channel);
       const isClick = track.name.trim().toLowerCase() === 'click';
       const clickVolume = opts.metronomeBar === undefined ? 0.9 : 0;
-      this.band.setChannelVolume(track.channel - 1, isPiano ? opts.pianoGuideVolume : isClick ? clickVolume : 0.85);
+      this.channelVolumes.set(track.channel - 1, isPiano ? opts.pianoGuideVolume : isClick ? clickVolume : 0.85);
     }
+    this.muted = new Set(opts.muted ?? []);
+    this.channelVolumes.forEach((_, ch) => this.applyVolume(ch));
     this.analysis = { ...analysis, bpm: opts.bpm };
     return this.analysis;
   }
 
   setPianoGuideVolume(volume: number): void {
-    this.analysis?.pianoChannels.forEach((ch) => this.band.setChannelVolume(ch - 1, volume));
+    this.analysis?.pianoChannels.forEach((ch) => {
+      this.channelVolumes.set(ch - 1, volume);
+      this.applyVolume(ch - 1);
+    });
+  }
+
+  /** Mutes or unmutes one part (channel 0–15), live. */
+  setMuted(channel: number, muted: boolean): void {
+    if (muted) this.muted.add(channel);
+    else this.muted.delete(channel);
+    this.applyVolume(channel);
+  }
+
+  private applyVolume(channel: number): void {
+    this.band.setChannelVolume(channel, this.muted.has(channel) ? 0 : (this.channelVolumes.get(channel) ?? 0.85));
   }
 
   async start(): Promise<boolean> {
