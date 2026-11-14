@@ -326,3 +326,25 @@ describe('transposeMidi', () => {
     expect(notes).toEqual([[0, 57], [9, 36], [0, 57]]);
   });
 });
+
+describe('alignFormStart with a varied first chorus', () => {
+  it('starts at the first chorus when it keeps both passes, even if the second matches better', () => {
+    const bar = 1920;
+    const bassBar = (root: number) => [
+      { deltaTime: 0, type: 'noteOn' as const, channel: 1, noteNumber: root, velocity: 80 },
+      { deltaTime: bar, type: 'noteOff' as const, channel: 1, noteNumber: root, velocity: 0 },
+    ];
+    // Form of 5 bars: C D G C F. Intro (E), chorus 1 with its last bar changed (80 %), chorus 2 exact.
+    const form = [48, 50, 55, 48, 53];
+    const roots = [52, ...form.slice(0, 4), 57, ...form];
+    const file = new Uint8Array(
+      writeMidi({
+        header: { format: 1, numTracks: 1, ticksPerBeat: 480 },
+        tracks: [[...roots.flatMap(bassBar), { deltaTime: 0, meta: true, type: 'endOfTrack' }]],
+      } as never),
+    ).buffer;
+    const chart = [0, 2, 7, 0, 5];
+    expect(alignFormStart(file, chart)).toBe(1);
+    expect(alignedChoruses(file, chart, 1)).toBe(2);
+  });
+});

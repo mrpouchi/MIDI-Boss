@@ -301,44 +301,45 @@ export function bassRootsPerBar(buffer: ArrayBuffer): (number | null)[] {
   return roots;
 }
 
+/** Minimum share of bars where the bass plays the chart root for a pass to count. */
+export const CHORUS_MATCH = 0.8;
+
 /**
  * For files that are not iReal exports (no click count-in): the bar where the
  * chart's form starts, found by matching the bass against the chart roots.
- * An intro is skipped this way. Null when nothing matches well enough.
+ * An intro is skipped this way. The start that gives the most usable passes
+ * wins (an arrangement may vary the end of its first chorus), then the best
+ * match. Null when nothing matches well enough.
  */
 export function alignFormStart(buffer: ArrayBuffer, formRoots: number[], minScore = 0.6): number | null {
   const roots = bassRootsPerBar(buffer);
   if (!formRoots.length || roots.length < formRoots.length) return null;
-  let bestOffset: number | null = null;
-  let bestScore = minScore;
+  const scoreAt = (offset: number) => formRoots.filter((root, i) => roots[offset + i] === root).length / formRoots.length;
+  let best: { offset: number; passes: number; score: number } | null = null;
   for (let offset = 0; offset + formRoots.length <= roots.length; offset++) {
-    let hits = 0;
-    formRoots.forEach((root, i) => {
-      if (roots[offset + i] === root) hits++;
-    });
-    const score = hits / formRoots.length;
-    if (score > bestScore + 1e-9) {
-      bestScore = score;
-      bestOffset = offset;
-    }
+    const score = scoreAt(offset);
+    if (score < minScore - 1e-9) continue;
+    let passes = 0;
+    for (let o = offset; o + formRoots.length <= roots.length && scoreAt(o) >= CHORUS_MATCH - 1e-9; o += formRoots.length) passes++;
+    if (!best || passes > best.passes || (passes === best.passes && score > best.score + 1e-9)) best = { offset, passes, score };
   }
-  return bestOffset;
+  return best?.offset ?? null;
 }
 
 /**
  * How many consecutive passes of the form, from `start`, the bass really
- * follows. Stricter than alignFormStart: a pass is kept only if at most ~15 %
- * of its bars differ (a walk-up on a downbeat, say). Arrangements of
- * recordings can stretch a chorus or solo on another form (Song For My
- * Father solos replace the B section by an A); those passes would show the
- * wrong chords.
+ * follows. Stricter than alignFormStart: a pass is kept only if at most ~20 %
+ * of its bars differ (a walk-up on a downbeat, a varied turnaround).
+ * Arrangements of recordings can stretch a chorus or solo on another form
+ * (Song For My Father solos replace the B section by an A, 79 %); those passes
+ * would show the wrong chords.
  */
-export function alignedChoruses(buffer: ArrayBuffer, formRoots: number[], start: number, minScore = 0.85): number {
+export function alignedChoruses(buffer: ArrayBuffer, formRoots: number[], start: number, minScore = CHORUS_MATCH): number {
   const roots = bassRootsPerBar(buffer);
   let count = 0;
   for (let offset = start; offset + formRoots.length <= roots.length; offset += formRoots.length) {
     const hits = formRoots.filter((root, i) => roots[offset + i] === root).length;
-    if (hits / formRoots.length < minScore) break;
+    if (hits / formRoots.length < minScore - 1e-9) break;
     count++;
   }
   return count;

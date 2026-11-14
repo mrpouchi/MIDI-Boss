@@ -108,6 +108,10 @@ const GM_NAMES_FR: Record<number, string> = {
   32: 'Contrebasse', 33: 'Basse électrique', 34: 'Basse électrique', 35: 'Basse fretless',
   56: 'Trompette', 57: 'Trombone', 58: 'Tuba', 59: 'Trompette bouchée',
   64: 'Sax soprano', 65: 'Sax alto', 66: 'Sax ténor', 67: 'Sax baryton',
+  3: 'Piano bastringue', 6: 'Clavecin', 11: 'Vibraphone',
+  40: 'Violon', 41: 'Alto (cordes)', 42: 'Violoncelle', 48: 'Cordes', 49: 'Cordes', 52: 'Voix', 53: 'Voix', 54: 'Voix',
+  60: 'Cor', 61: 'Section de cuivres', 68: 'Hautbois', 69: 'Cor anglais', 70: 'Basson', 71: 'Clarinette',
+  72: 'Piccolo', 73: 'Flûte', 74: 'Flûte à bec',
 };
 
 /** MusyngKite file names for the saxophones (the sax-mk option follows the part). */

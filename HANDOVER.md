@@ -563,3 +563,10 @@ Faire valider à l’utilisateur l’écoute du mixage restauré et de la batter
 - Tonalité écrite : la clé iReal (`parseIrealKey`, « C- » = do mineur), à défaut le dernier accord (`chartKey`). Les fondamentales sont réécrites en bémols dans les tonalités à bémols (F, B♭, E♭, A♭, D♭, G♭ et C ; Dm, Gm, Cm, Fm, B♭m, E♭m et Am), en dièses sinon.
 - Orchestre : `transposeMidi` décale toutes les notes sauf le canal 10 (batterie), appliqué dans `prepareRun` (exercice et « Écouter le morceau »).
 - Mise en page : libellés de tempo raccourcis (« Lent · 96 », unité dans le titre) et « Calage du son » sur une ligne, pour garder l'écran sans défilement avec 5 étapes et 3 choix de tours.
+
+## Fly Me To The Moon, big band (14 novembre 2026)
+
+- Nouveau MIDI (big band, 19 pistes, 120 BPM, 72 mesures : 4 d'intro, 2 grilles de 32, 4 de fin). L'original est dans `~/Documents/eph/Midi/fly me to the moon.mid`, l'ancien export iReal dans `~/Documents/eph/Fly Me To The Moon.mid`.
+- L'export réutilisait les canaux entre instruments, et dupliquait la guitare (pistes Guitar, Piano et Bass) et la basse (pistes Bass et Piano). La copie dans `local-songs/` est reconstruite avec un canal par instrument et sans doublons : alto 0, flûte 1, ténors 2, baryton 3, trompettes 4, trompette bouchée 5, trombones 6, guitare 7, piano 8, batterie 9, contrebasse 10, voix 11. Le script de reconstruction est temporaire : il faut le refaire si le fichier change.
+- Calage : la 1ʳᵉ grille varie son turnaround (84 % de concordance). `alignFormStart` choisit maintenant le départ qui donne le plus de grilles utilisables (`CHORUS_MATCH` = 0,8, aussi le seuil par défaut d'`alignedChoruses`), puis le meilleur score. Résultat : Fly Me part mesure 5 avec 2 grilles au lieu d'une seule. Cantaloupe (mesure 5 ×2), Song For My Father (mesure 6 ×1, ses solos restent à 79 %) et Blue Bossa (×3) sont inchangés.
+- Réglages : la liste « Sons de l'orchestre » défile dans sa zone (hauteur limitée à l'écran moins 29rem), la page reste fixe. Noms français ajoutés pour les bois, voix et cordes (`GM_NAMES_FR`).

@@ -917,7 +917,8 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
                         )}
                       </button>
                     </div>
-                    <ul className="mt-1.5 space-y-1.5">
+                    {/* Big bands have a dozen parts: the list scrolls, the page stays put. */}
+                    <ul className="mt-1.5 max-h-[max(8rem,calc(100dvh-29rem))] space-y-1.5 overflow-y-auto pr-1">
                       {bandParts.map((part) => {
                         const family = familyOf(part.program, part.channel);
                         const current = resolveSound(part.program, part.channel, songSounds[part.channel]);
