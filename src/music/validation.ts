@@ -3,6 +3,7 @@ import {
   NotationSystem,
   VoicingStep,
   formatPitchClass,
+  getOptionalPitchClassesForStep,
   getTargetPitchClassesForStep,
 } from './chords';
 
@@ -30,15 +31,16 @@ export function validateChordInput(
     activeMidiNotes.map((note) => ((note % 12) + 12) % 12),
   );
   const expectedSet = new Set<number>(expectedList);
+  const optional = new Set<number>(getOptionalPitchClassesForStep(target, step));
 
   const matchedPitchClasses = expectedList.filter((pc) => activeSet.has(pc));
   const missingPitchClasses = expectedList.filter((pc) => !activeSet.has(pc));
-  const extraPitchClasses = Array.from(activeSet).filter((pc) => !expectedSet.has(pc));
+  const extraPitchClasses = Array.from(activeSet).filter((pc) => !expectedSet.has(pc) && !optional.has(pc));
 
   const isComplete =
     missingPitchClasses.length === 0 &&
     extraPitchClasses.length === 0 &&
-    activeSet.size >= expectedSet.size;
+    matchedPitchClasses.length === expectedSet.size;
 
   const hasWrongNotes = extraPitchClasses.length > 0;
   const progressRatio =

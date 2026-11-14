@@ -12,7 +12,7 @@ export type ChordFamily =
 
 export type NotationSystem = 'intl' | 'fr';
 
-export type VoicingStep = 'root' | 'root-5th' | 'triad' | 'full';
+export type VoicingStep = 'root' | 'root-5th' | 'triad' | 'full' | 'guides';
 
 export interface VoicingStepMeta {
   id: VoicingStep;
@@ -27,6 +27,7 @@ export const VOICING_STEP_ORDER: VoicingStep[] = [
   'root-5th',
   'triad',
   'full',
+  'guides',
 ];
 
 export const VOICING_STEPS: Record<VoicingStep, VoicingStepMeta> = {
@@ -61,6 +62,14 @@ export const VOICING_STEPS: Record<VoicingStep, VoicingStepMeta> = {
     shortLabelFr: '4 · Complet (7e)',
     descriptionFr:
       'Jouez l’accord complet avec ses extensions (7e), dans le renversement de votre choix.',
+  },
+  guides: {
+    id: 'guides',
+    order: 5,
+    labelFr: 'Étape 5 · Notes guides (3 · 7)',
+    shortLabelFr: '5 · Notes guides',
+    descriptionFr:
+      'Seulement la tierce et la septième : la basse joue déjà la fondamentale. Vous pouvez l’ajouter à la main gauche.',
   },
 };
 
@@ -240,7 +249,23 @@ export function getTargetIntervalsForStep(
   if (step === 'triad') {
     return meta.intervals.filter((interval) => interval < 10);
   }
+  if (step === 'guides' && hasSeventh(meta)) {
+    return [meta.intervals[1], meta.intervals[3]];
+  }
   return [...meta.intervals];
+}
+
+/** Four-note families (1 · 3 · 5 · 7): the ones that have guide tones. */
+function hasSeventh(meta: ChordFamilyMeta): boolean {
+  return meta.intervals.length === 4;
+}
+
+/**
+ * Notes accepted on top of the target without being wrong: with guide tones,
+ * the root (the learner's left hand may double the bass).
+ */
+export function getOptionalPitchClassesForStep(chord: ChordDefinition, step: VoicingStep): number[] {
+  return step === 'guides' && hasSeventh(CHORD_FAMILIES[chord.family]) ? [chord.root % 12] : [];
 }
 
 export function getTargetPitchClassesForStep(
@@ -262,6 +287,9 @@ export function getStepIntervalLabels(
   }
   if (step === 'triad') {
     return meta.intervalLabels.filter((_, idx) => meta.intervals[idx] < 10);
+  }
+  if (step === 'guides' && hasSeventh(meta)) {
+    return [meta.intervalLabels[1], meta.intervalLabels[3]];
   }
   return [...meta.intervalLabels];
 }
@@ -415,7 +443,8 @@ export function intervalNameFr(semitones: number): string {
 /** Intervals a step adds compared with the previous one (what is new to learn). */
 export function getNewIntervalsForStep(chord: ChordDefinition, step: VoicingStep): number[] {
   const index = VOICING_STEP_ORDER.indexOf(step);
-  if (index <= 0) return getTargetIntervalsForStep(chord, step);
+  // Guide tones remove notes rather than add one: both of them are the point.
+  if (index <= 0 || step === 'guides') return getTargetIntervalsForStep(chord, step);
   const before = new Set(getTargetIntervalsForStep(chord, VOICING_STEP_ORDER[index - 1]));
   return getTargetIntervalsForStep(chord, step).filter((i) => !before.has(i));
 }

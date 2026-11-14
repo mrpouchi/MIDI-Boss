@@ -28,11 +28,21 @@ export const OBJECTIVES_TO_UNLOCK_NEXT_SONG = 2;
 
 const stepRank = (step: string) => VOICING_STEP_ORDER.indexOf(step as (typeof VOICING_STEP_ORDER)[number]);
 
+/**
+ * A run at `played` counts for an objective at `required` when it plays at least
+ * those notes. Guide tones (3 · 7) leave out the root and fifth: they only
+ * count for themselves, and the earlier steps never count for them.
+ */
+function stepCovers(played: string, required: string): boolean {
+  if (played === 'guides' || required === 'guides') return played === required;
+  return stepRank(played) >= stepRank(required);
+}
+
 /** A complete run at this step or harder, at least this fast, above both thresholds. */
 export function runMeetsObjective(run: PlayAlongRun, song: PathSong, objective: SongObjective): boolean {
   if (!run.completed) return false;
   if (songTitleKey(run.songTitle) !== songTitleKey(song.title)) return false;
-  if (stepRank(run.step) < stepRank(objective.step)) return false;
+  if (!stepCovers(run.step, objective.step)) return false;
   if (run.noteAccuracy < objective.minNotes || run.timingAccuracy < objective.minTiming) return false;
   if (run.originalBpm === undefined) return objective.tempo === 'slow';
   return run.bpm >= resolveTempo(objective.tempo, run.originalBpm) - 1;

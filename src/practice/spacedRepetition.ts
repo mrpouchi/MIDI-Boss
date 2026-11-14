@@ -228,6 +228,7 @@ export function generateDuolingoMicroLesson(
     'root-5th': 'en ajoutant les quintes',
     triad: 'avec les accords à trois notes',
     full: 'avec les septièmes',
+    guides: 'avec les notes guides',
   };
   const goalDescription =
     spacedOverview.dueCount > 0

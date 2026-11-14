@@ -548,3 +548,10 @@ Faire valider à l’utilisateur l’écoute du mixage restauré et de la batter
 - Cause : sans son intro, Blue Bossa commence sur la grille, donc `prependCountIn` ajoute une piste « Click » (rimshot) sur le canal 10, celui de la batterie. Pendant l'exercice, l'appli joue son propre métronome et mettait les canaux des pistes « Click » à 0 : le volume étant par canal, toute la batterie était coupée.
 - Correctif : avec le métronome de l'appli, `BackingTrack.load` retire les pistes « Click » du fichier (`removeClickTracks`). Sans métronome, une piste « Click » ne règle le volume de son canal que si aucune autre piste ne l'utilise. Même règle pour la liste « Sons de l'orchestre ».
 - Vérifié : batterie de Blue Bossa à un niveau normal (pic 0,07), Song For My Father inchangé. Test ajouté dans `midiFile.test.ts`.
+
+## Notes guides (14 novembre 2026)
+
+- Nouvelle étape `guides` (5e, après `full`) : tierce + septième des accords à 4 sons (`getTargetIntervalsForStep`). Les triades et les sus n'en ont pas : l'étape retombe alors sur l'accord entier.
+- La fondamentale est tolérée en plus (`getOptionalPitchClassesForStep`), car la main gauche peut doubler la basse. Avec l'orchestre, `PlayAlongScorer` exigeait déjà les notes cibles et acceptait toute note de l'accord.
+- Progression : une séance en notes guides ne valide que l'objectif « Les notes guides », et l'inverse aussi (`stepCovers` dans `songProgress.ts`). Objectif ajouté à chaque morceau entre « La septième » et « Au tempo original », sauf Maiden Voyage (accords sus).
+- Découverte : `getNewIntervalsForStep` marque la tierce et la septième comme nouvelles ; texte dans `STEP_INTROS.guides`.

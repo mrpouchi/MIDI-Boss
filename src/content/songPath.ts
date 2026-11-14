@@ -55,7 +55,20 @@ export const TEMPO_LABEL: Record<TempoLevel, string> = {
 };
 
 /** The standard ladder: roots → fifths → triads → sevenths → original tempo. */
-function ladder(songId: string, opts: { triadHint?: string } = {}): SongObjective[] {
+function ladder(songId: string, opts: { triadHint?: string; guides?: boolean } = {}): SongObjective[] {
+  const guides: SongObjective[] = opts.guides === false
+    ? []
+    : [
+        {
+          id: `${songId}:guides`,
+          step: 'guides',
+          tempo: 'medium',
+          label: 'Les notes guides',
+          hint: 'Tierce et septième seulement : la basse a la fondamentale. Bougez le moins possible d’un accord à l’autre.',
+          minNotes: 0.8,
+          minTiming: 0.7,
+        },
+      ];
   return [
     {
       id: `${songId}:roots`,
@@ -93,6 +106,7 @@ function ladder(songId: string, opts: { triadHint?: string } = {}): SongObjectiv
       minNotes: 0.8,
       minTiming: 0.7,
     },
+    ...guides,
     {
       id: `${songId}:original`,
       step: 'full',
@@ -105,8 +119,15 @@ function ladder(songId: string, opts: { triadHint?: string } = {}): SongObjectiv
   ];
 }
 
-function song(id: string, title: string, focus: string, introduces: string[], triadHint?: string): PathSong {
-  return { id, title, focus, introduces, objectives: ladder(id, { triadHint }) };
+function song(
+  id: string,
+  title: string,
+  focus: string,
+  introduces: string[],
+  triadHint?: string,
+  opts: { guides?: boolean } = {},
+): PathSong {
+  return { id, title, focus, introduces, objectives: ladder(id, { triadHint, ...opts }) };
 }
 
 export const SONG_PATH: PathUnit[] = [
@@ -119,8 +140,9 @@ export const SONG_PATH: PathUnit[] = [
       // tombent avant le premier temps (anticipations), une notion à enseigner
       // plus tard. À remettre avec une leçon dédiée.
       // song('so-what', 'So What', 'Deux accords à un demi-ton l’un de l’autre : premières touches noires.', ['Touches noires', 'Demi-ton', 'Accord m7'], 'Deux accords mineurs : écoutez la tierce mineure.'),
-      song('cantaloupe-island', 'Cantaloupe Island', 'Trois accords, un groove lent : la couleur m7 contre la couleur 7.', ['Accord 7 (dominante)', 'Changer d’accord en rythme']),
-      song('maiden-voyage', 'Maiden Voyage', 'Des accords suspendus qui flottent : tenir et poser.', ['Accords sus4']),
+      song('cantaloupe-island', 'Cantaloupe Island', 'Trois accords, un groove lent : la couleur m7 contre la couleur 7.', ['Accord 7 (dominante)', 'Changer d’accord en rythme', 'Notes guides']),
+      // Sus chords have no third: no guide-tone objective here.
+      song('maiden-voyage', 'Maiden Voyage', 'Des accords suspendus qui flottent : tenir et poser.', ['Accords sus4'], undefined, { guides: false }),
     ],
   },
   {

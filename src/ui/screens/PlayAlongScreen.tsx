@@ -76,6 +76,7 @@ const STEP_NAMES: Record<VoicingStep, string> = {
   'root-5th': 'Fondamentale + quinte',
   triad: 'Accords à 3 notes',
   full: 'Accords complets (7e)',
+  guides: 'Notes guides (3 · 7)',
 };
 
 function chordLabel(item: ChartChord, notation: NotationSystem): string {

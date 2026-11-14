@@ -43,4 +43,11 @@ export const STEP_INTROS: Record<VoicingStep, StepIntro> = {
       'La septième donne le son jazz. 10 demi-tons au-dessus de la fondamentale : septième mineure (m7 et 7). 11 demi-tons : septième majeure (maj7), juste sous l’octave.',
     howTo: 'Un ton (ou un demi-ton pour maj7) sous la fondamentale de l’octave suivante. Quatre doigts, ou laissez tomber la quinte si la main est trop étirée.',
   },
+  guides: {
+    notion: 'les notes guides',
+    title: 'Nouveau : les notes guides',
+    explanation:
+      'La tierce et la septième suffisent à dire qui est l’accord : majeur ou mineur, 7 ou maj7. Avec un bassiste, la fondamentale est déjà jouée, et la quinte n’apporte presque rien. C’est la base de l’accompagnement jazz.',
+    howTo: 'Deux doigts : la tierce et la septième, dans l’ordre qui vous arrange. D’un accord à l’autre, bougez le moins possible : souvent une note reste et l’autre descend d’un demi-ton. La fondamentale à la main gauche est permise.',
+  },
 };

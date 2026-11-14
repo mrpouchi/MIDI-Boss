@@ -53,3 +53,27 @@ describe('what each step introduces', () => {
     expect(intervalNameFr(11)).toBe('septième majeure');
   });
 });
+
+describe('guide tones', () => {
+  it('keeps the third and the seventh of four-note chords', async () => {
+    const { getNewIntervalsForStep } = await import('../chords');
+    expect(getTargetPitchClassesForStep(createChord(2, 'm7'), 'guides')).toEqual([5, 0]); // Dm7: F, C
+    expect(getTargetPitchClassesForStep(createChord(7, '7'), 'guides')).toEqual([11, 5]); // G7: B, F
+    expect(getTargetPitchClassesForStep(createChord(0, 'maj7'), 'guides')).toEqual([4, 11]); // Cmaj7: E, B
+    expect(getStepIntervalLabels(createChord(2, 'm7b5'), 'guides')).toEqual(['♭3', '♭7']);
+    expect(getNewIntervalsForStep(createChord(2, 'm7'), 'guides')).toEqual([3, 10]);
+  });
+
+  it('falls back to the whole triad when there is no seventh', () => {
+    expect(getTargetPitchClassesForStep(createChord(0, 'sus4'), 'guides')).toEqual([0, 5, 7]);
+  });
+
+  it('accepts the root on top of the guide tones, but nothing else', async () => {
+    const { validateChordInput } = await import('../validation');
+    const dm7 = createChord(2, 'm7');
+    expect(validateChordInput([53, 60], dm7, 'guides').isComplete).toBe(true);
+    expect(validateChordInput([38, 53, 60], dm7, 'guides').isComplete).toBe(true);
+    expect(validateChordInput([38, 53, 57, 60], dm7, 'guides').hasWrongNotes).toBe(true);
+    expect(validateChordInput([38, 53], dm7, 'guides').isComplete).toBe(false);
+  });
+});

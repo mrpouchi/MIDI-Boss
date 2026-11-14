@@ -41,7 +41,7 @@ describe('runMeetsObjective', () => {
 describe('buildSongPath', () => {
   it('starts with only the first objective of the first song open', () => {
     const views = buildSongPath(SONG_PATH, []);
-    expect(views[0].objectives.map((o) => o.state)).toEqual(['current', 'locked', 'locked', 'locked', 'locked']);
+    expect(views[0].objectives.map((o) => o.state)).toEqual(['current', 'locked', 'locked', 'locked', 'locked', 'locked']);
     expect(views[1].unlocked).toBe(false);
     expect(currentSong(views)?.song.id).toBe('cantaloupe-island');
   });
@@ -63,5 +63,22 @@ describe('buildSongPath for an admin profile', () => {
     expect(views.flatMap((v) => v.objectives).some((o) => o.state === 'locked')).toBe(false);
     expect(views[0].objectives[0].state).toBe('done');
     expect(views[0].objectives[1].state).toBe('current');
+  });
+});
+
+describe('guide-tone objectives', () => {
+  const objective = (id: string) => firstSong.objectives.find((o) => o.id === `${firstSong.id}:${id}`)!;
+
+  it('only counts guide-tone runs for the guide-tone objective, and not the other way round', () => {
+    const bpm = resolveTempo('medium', 240);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'guides', bpm), firstSong, objective('guides'))).toBe(true);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'full', bpm), firstSong, objective('guides'))).toBe(false);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'guides', bpm), firstSong, objective('sevenths'))).toBe(false);
+    expect(runMeetsObjective(run('Cantaloupe Island', 'guides', bpm), firstSong, objective('roots'))).toBe(false);
+  });
+
+  it('skips guide tones on a song made of sus chords', () => {
+    const maiden = SONG_PATH.flatMap((u) => u.songs).find((s) => s.id === 'maiden-voyage')!;
+    expect(maiden.objectives.some((o) => o.step === 'guides')).toBe(false);
   });
 });
