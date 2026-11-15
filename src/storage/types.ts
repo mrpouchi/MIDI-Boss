@@ -97,7 +97,8 @@ export interface PlayAlongRun {
   songTitle: string;
   /** Semitones from the written key, when the run was transposed. */
   transpose?: number;
-  step: VoicingStep;
+  /** Chord step, or 'melody' (then total/found/onTime count melody notes). */
+  step: VoicingStep | 'melody';
   bpm: number;
   /** Tempo of the original file, to tell slow / medium / original runs apart. */
   originalBpm?: number;

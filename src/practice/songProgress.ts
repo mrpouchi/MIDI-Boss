@@ -31,10 +31,12 @@ const stepRank = (step: string) => VOICING_STEP_ORDER.indexOf(step as (typeof VO
 /**
  * A run at `played` counts for an objective at `required` when it plays at least
  * those notes. Guide tones (3 · 7) leave out the root and fifth: they only
- * count for themselves, and the earlier steps never count for them.
+ * count for themselves, and the earlier steps never count for them. Same for
+ * the melody, which is not a chord step at all.
  */
 function stepCovers(played: string, required: string): boolean {
-  if (played === 'guides' || required === 'guides') return played === required;
+  // Guide tones and the melody only count for themselves.
+  if (played === 'guides' || required === 'guides' || played === 'melody' || required === 'melody') return played === required;
   return stepRank(played) >= stepRank(required);
 }
 

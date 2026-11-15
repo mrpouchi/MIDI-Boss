@@ -105,7 +105,7 @@ export function PlayAlongScreen(props: PlayAlongScreenProps) {
   // Every run starts by showing the song's chords calmly (new notion first).
   const [phase, setPhase] = useState<Phase>('discover');
   const goal = props.objective;
-  const [step, setStep] = useState<VoicingStep>(goal?.objective.step ?? 'root');
+  const [step, setStep] = useState<VoicingStep>(goal && goal.objective.step !== 'melody' ? goal.objective.step : 'root');
   const [tempoLevel, setTempoLevel] = useState<TempoLevel>(goal?.objective.tempo ?? 'slow');
   const [originalBpm, setOriginalBpm] = useState<number | null>(null);
   const [midiInfo, setMidiInfo] = useState<MidiAnalysis | null>(null);

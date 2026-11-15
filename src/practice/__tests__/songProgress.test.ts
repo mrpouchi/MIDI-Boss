@@ -82,3 +82,30 @@ describe('guide-tone objectives', () => {
     expect(maiden.objectives.some((o) => o.step === 'guides')).toBe(false);
   });
 });
+
+describe('melody objectives', () => {
+  const fly = SONG_PATH.flatMap((u) => u.songs).find((x) => x.id === 'fly-me-to-the-moon')!;
+  const melody = fly.objectives.filter((o) => o.step === 'melody');
+  const chords = fly.objectives.filter((o) => o.step !== 'melody');
+  const fly120 = (step: PlayAlongRun['step'], bpm: number) => run('Fly Me To The Moon', step, bpm, { originalBpm: 120 });
+
+  it('come after every chord objective, slow then original tempo', () => {
+    expect(melody.map((o) => o.tempo)).toEqual(['slow', 'original']);
+    expect(fly.objectives.slice(-2)).toEqual(melody);
+    // Songs without a melody track get none.
+    expect(SONG_PATH[0].songs[0].objectives.some((o) => o.step === 'melody')).toBe(false);
+  });
+
+  it('are met by melody runs only, and melody runs meet no chord objective', () => {
+    expect(runMeetsObjective(fly120('melody', 72), fly, melody[0])).toBe(true);
+    expect(runMeetsObjective(fly120('full', 120), fly, melody[0])).toBe(false);
+    expect(chords.some((o) => runMeetsObjective(fly120('melody', 120), fly, o))).toBe(false);
+  });
+
+  it('open once the last chord objective is done', () => {
+    const view = (runs: PlayAlongRun[]) => buildSongPath(SONG_PATH, runs, true).find((v) => v.song.id === 'fly-me-to-the-moon')!;
+    // Admin: everything open; the melody states follow the runs.
+    expect(view([]).objectives.at(-2)!.state).not.toBe('done');
+    expect(view([fly120('melody', 72)]).objectives.at(-2)!.state).toBe('done');
+  });
+});

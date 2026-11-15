@@ -9,9 +9,12 @@ import { VoicingStep } from '../music/chords';
 
 export type TempoLevel = 'slow' | 'medium' | 'original';
 
+/** What a run practises: one of the chord steps, or the song's melody. */
+export type PathStep = VoicingStep | 'melody';
+
 export interface SongObjective {
   id: string;
-  step: VoicingStep;
+  step: PathStep;
   tempo: TempoLevel;
   label: string;
   hint: string;
@@ -119,15 +122,43 @@ function ladder(songId: string, opts: { triadHint?: string; guides?: boolean } =
   ];
 }
 
+/**
+ * The tune, once every chord objective is done: slow, then at the original
+ * tempo. Only for songs whose MIDI file has a melody track (see melody.ts).
+ */
+function melodyObjectives(songId: string): SongObjective[] {
+  return [
+    {
+      id: `${songId}:melody`,
+      step: 'melody',
+      tempo: 'slow',
+      label: 'La mélodie',
+      hint: 'Une note à la fois, à la main droite, à l’octave qui vous arrange : l’orchestre joue les accords pour vous.',
+      minNotes: 0.8,
+      minTiming: 0.6,
+    },
+    {
+      id: `${songId}:melody-original`,
+      step: 'melody',
+      tempo: 'original',
+      label: 'La mélodie au tempo original',
+      hint: 'Le thème tel qu’il se chante, avec l’orchestre.',
+      minNotes: 0.85,
+      minTiming: 0.75,
+    },
+  ];
+}
+
 function song(
   id: string,
   title: string,
   focus: string,
   introduces: string[],
   triadHint?: string,
-  opts: { guides?: boolean } = {},
+  opts: { guides?: boolean; melody?: boolean } = {},
 ): PathSong {
-  return { id, title, focus, introduces, objectives: ladder(id, { triadHint, ...opts }) };
+  const objectives = ladder(id, { triadHint, ...opts });
+  return { id, title, focus, introduces, objectives: opts.melody ? [...objectives, ...melodyObjectives(id)] : objectives };
 }
 
 export const SONG_PATH: PathUnit[] = [
@@ -194,7 +225,8 @@ export const SONG_PATH: PathUnit[] = [
     title: 'Les standards',
     goal: 'Enchaîner, moduler, tenir des grilles longues.',
     songs: [
-      song('fly-me-to-the-moon', 'Fly Me To The Moon', 'Le cycle des quintes.', ['Cycle des quintes']),
+      // Its MIDI has a melody track: the tune comes after the chords.
+      song('fly-me-to-the-moon', 'Fly Me To The Moon', 'Le cycle des quintes, puis la mélodie.', ['Cycle des quintes', 'Jouer la mélodie'], undefined, { melody: true }),
       song('girl-from-ipanema', 'Girl From Ipanema, The', 'Bossa nova au pont qui module.', ['Pont modulant', 'Bossa nova']),
       song('satin-doll', 'Satin Doll', 'Des II-V enchaînés à grande vitesse.', ['II-V en chaîne']),
       song('all-the-things', 'All The Things You Are', 'Le boss final : modulations partout.', ['Modulations']),

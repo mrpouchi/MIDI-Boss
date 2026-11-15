@@ -31,6 +31,7 @@ import { LibraryScreen } from './ui/screens/LibraryScreen';
 import { ProgressScreen } from './ui/screens/ProgressScreen';
 import { PathScreen } from './ui/screens/PathScreen';
 import { PlayAlongScreen } from './ui/screens/PlayAlongScreen';
+import { MelodyScreen } from './ui/screens/MelodyScreen';
 import { LocalSongFile } from './content/localSongs';
 import { PathSong, SongObjective } from './content/songPath';
 import { Profile } from './storage/profiles';
@@ -346,14 +347,14 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
     setActiveTab('play');
   }, []);
 
-  const handleFinishPlayAlong = useCallback((run: PlayAlongRun, session: SessionSummary) => {
+  const handleFinishPlayAlong = useCallback((run: PlayAlongRun, session?: SessionSummary) => {
     setStoredData((prev) => ({
       ...prev,
       isDemoData: false,
       playAlongRuns: [...(prev.playAlongRuns ?? []), run].slice(-200),
     }));
-    // Each chord also feeds per-chord statistics and spaced repetition.
-    handleCompleteSessionRef.current(session);
+    // Each chord also feeds per-chord statistics and spaced repetition (a melody run has none).
+    if (session) handleCompleteSessionRef.current(session);
   }, []);
   const handleCompleteSessionRef = useRef<(summary: SessionSummary) => void>(() => undefined);
 
@@ -547,7 +548,27 @@ export default function App({ profile, onSwitchProfile }: AppProps) {
         )}
       </main>
 
-      {playAlong && (
+      {playAlong?.goal?.objective.step === 'melody' && (
+        <MelodyScreen
+          key={`${playAlong.local.fileName}:${playAlong.goal.objective.id}`}
+          localSong={playAlong.local}
+          irealSong={playAlong.ireal}
+          objective={playAlong.goal}
+          settings={storedData.settings}
+          onUpdateSettings={handleUpdateSettings}
+          activeNotes={activeNotes}
+          virtualLatchNotes={Array.from(virtualLatchNotes)}
+          onPressVirtualNote={handlePressVirtualNote}
+          onReleaseVirtualNote={handleReleaseVirtualNote}
+          onToggleLatchNote={handleToggleLatchNote}
+          onClearVirtualLatchNotes={handleClearVirtualLatchNotes}
+          subscribeNoteEvents={subscribeNoteEvents}
+          onFinish={handleFinishPlayAlong}
+          onClose={() => setPlayAlong(null)}
+        />
+      )}
+
+      {playAlong && playAlong.goal?.objective.step !== 'melody' && (
         <PlayAlongScreen
           key={`${playAlong.local.fileName}:${playAlong.goal?.objective.id ?? 'free'}`}
           localSong={playAlong.local}

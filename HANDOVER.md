@@ -575,3 +575,10 @@ Faire valider à l’utilisateur l’écoute du mixage restauré et de la batter
   - canal 8, ex-« Piano », renommé « Melodie », programme 56 (trompette) ;
   - batterie (canal 9) et contrebasse (canal 10).
   - Les saxophones, la flûte, les trompettes, les trombones et la voix (doublure de la mélodie) sont retirés. Le calage est inchangé (même basse) ; seul le guide piano coupé change (canal 8, avant 9 = la mélodie).
+
+## La mélodie (15 novembre 2026)
+
+- Nouvel objectif après tous les objectifs d'accords d'un morceau : « La mélodie » au tempo lent, puis « La mélodie au tempo original » (`melodyObjectives` dans `songPath.ts`, `step: 'melody'`). On l'active par morceau avec `{ melody: true }` ; seul Fly Me To The Moon l'a pour l'instant, car c'est le seul MIDI qui a une piste de mélodie.
+- La mélodie est lue dans le MIDI, sur la piste nommée Melodie / Melody / Lead / Voice / Vocals / Chant / Theme (`findMelodyChannel`). Quand plusieurs notes partent ensemble, seule la plus haute est gardée. Moteur pur et testé : `src/practice/melody.ts`. Une note compte si c'est la bonne note, à n'importe quelle octave, frappée dans une fenêtre autour de son début (±260–400 ms selon le tempo). Elle est « à l'heure » à ±110–160 ms. Les fausses notes sont comptées, sans influencer la validation.
+- Écran `MelodyScreen.tsx` : d'abord la découverte (texte `MELODY_INTRO`, choix du tempo, « Écouter la mélodie » : la mélodie défile et s'entend, sans score), puis « Jouer la mélodie » (la piste mélodie est coupée, le piano d'accompagnement joue), puis les résultats. Le geste « Suivant » ×3 lance le passage noté. On joue un seul tour de grille.
+- Les passages « mélodie » sont enregistrés comme des `PlayAlongRun` avec `step: 'melody'`. Ils ne valident que les objectifs mélodie et ne comptent pas pour les compétences d'accords (`mastery.ts`).

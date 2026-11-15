@@ -51,3 +51,13 @@ export const STEP_INTROS: Record<VoicingStep, StepIntro> = {
     howTo: 'Deux doigts : la tierce et la septième, dans l’ordre qui vous arrange. D’un accord à l’autre, bougez le moins possible : souvent une note reste et l’autre descend d’un demi-ton. La fondamentale à la main gauche est permise.',
   },
 };
+
+/** The melody, after all the chords of a song (same calm "Découverte" first). */
+export const MELODY_INTRO: StepIntro = {
+  notion: 'la mélodie',
+  title: 'Nouveau : la mélodie',
+  explanation:
+    'Vous connaissez les accords du morceau : jouez maintenant ce que chante la voix. Une seule note à la fois, et l’orchestre joue les accords pour vous. Chaque note de la mélodie appartient presque toujours à l’accord du moment, ou glisse vers la note suivante.',
+  howTo:
+    'Main droite. Les notes défilent de droite à gauche : jouez chacune quand elle touche la ligne. N’importe quelle octave compte. Écoutez d’abord la mélodie une fois, sans score.',
+};

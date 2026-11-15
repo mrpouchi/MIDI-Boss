@@ -1,9 +1,9 @@
 import { Check, Lock, Play, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { LocalSongFile, findLocalSong, songTitleKey } from '../../content/localSongs';
-import { PathSong, SONG_PATH, SongObjective, TEMPO_LABEL } from '../../content/songPath';
+import { PathSong, PathStep, SONG_PATH, SongObjective, TEMPO_LABEL } from '../../content/songPath';
 import { MidiState } from '../../input/types';
-import { VOICING_STEPS, VoicingStep } from '../../music/chords';
+import { VOICING_STEPS } from '../../music/chords';
 import { IrealSong } from '../../music/ireal';
 import { assessSkills, recommendNextSkills } from '../../practice/mastery';
 import { ObjectiveState, buildSongPath, currentSong } from '../../practice/songProgress';
@@ -39,7 +39,15 @@ const ZIGZAG = [0, -56, -84, -56, 0, 56, 84, 56];
 const displayTitle = (title: string) => title.replace(/, The$/, '');
 
 /** One dot per note asked at this step; the original-tempo goal shows a note. */
-function ObjectiveGlyph({ step, original }: { step: VoicingStep; original: boolean }) {
+function ObjectiveGlyph({ step, original }: { step: PathStep; original: boolean }) {
+  if (step === 'melody') {
+    // One note: the tune (a small staff line under it at the original tempo).
+    return (
+      <span className="flex flex-col items-center font-display text-3xl leading-none font-bold" aria-hidden="true">
+        ♪{original && <span className="mt-0.5 h-[3px] w-6 rounded-full bg-current" />}
+      </span>
+    );
+  }
   if (original) {
     return (
       <span className="font-display text-3xl leading-none font-bold" aria-hidden="true">

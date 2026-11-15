@@ -53,7 +53,7 @@ export const MASTERY_RULES = {
 
 function assessFromPlayAlong(skill: SkillNode, runs: PlayAlongRun[]) {
   const rule = skill.evidence!;
-  const relevant = runs.filter((r) => r.completed && rule.steps.includes(r.step));
+  const relevant = runs.filter((r) => r.completed && r.step !== 'melody' && rule.steps.includes(r.step));
   const target = MASTERY_RULES.playAlongRuns;
   if (relevant.length === 0) {
     return { status: 'not-started' as SkillStatus, evidenceCount: 0, accuracy: null, progress: { current: 0, target } };
