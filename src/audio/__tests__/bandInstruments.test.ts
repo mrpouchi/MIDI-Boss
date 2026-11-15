@@ -12,11 +12,20 @@ describe('band sound library', () => {
 
   it('defaults to the real sampled instruments, an electric part to an electric sound', () => {
     expect(defaultSound(32, 1).id).toBe('bass-smolken');
-    expect(defaultSound(66, 2).id).toBe('sax-vcsl-vib');
+    expect(defaultSound(66, 2).id).toBe('sax-vcsl-straight');
+    expect(defaultSound(65, 2).id).toBe('sax-vcsl-straight');
+    expect(defaultSound(56, 0).id).toBe('tp-sweet');
+    expect(defaultSound(57, 4).id).toBe('brass-gu');
     expect(defaultSound(0, 3).id).toBe('piano-salamander');
-    expect(defaultSound(33, 1).id).toBe('bass-jazz');
+    expect(defaultSound(33, 1).id).toBe('bass-finger');
     expect(defaultSound(59, 0).id).toBe('tp-muted');
-    expect(defaultSound(0, 9).id).toBe('drums-jazz');
+    expect(defaultSound(0, 9).id).toBe('drums-gu2-brush-ride');
+  });
+
+  it('has a valid default for every family and program', () => {
+    for (let program = 0; program < 128; program++) {
+      for (const channel of [0, 9]) expect(defaultSound(program, channel)).toBeDefined();
+    }
   });
 
   it('only accepts a sound from the part own family', () => {

@@ -22,3 +22,30 @@ en médiane). Chaque région de `preset.json` porte donc un `offset` (secondes)
 où la lecture démarre : le premier instant au-dessus de -40 dB sous le pic de
 l'échantillon, moins 1 ms de marge. Sans ces offsets, le piano répond plus
 tard au clavier.
+
+## generaluser-drums/ — kits Jazz et Balais de GeneralUser GS v2.0.3 (test)
+
+- S. Christian Collins, GeneralUser GS License v2.0 (usage libre, y compris
+  dans un logiciel). Source : github.com/mrbumpy409/GeneralUser-GS.
+- Le .sf2 d'origine est rendu frappe par frappe avec FluidSynth, sans
+  réverbération : programme 32 (Jazz) et programme 40 (Balais), banque 128.
+  Les touches 35 à 59 sont rendues à 8 vélocités, les autres à 3. Le rendu
+  garde les couches, les échantillons superposés et les filtres programmés par
+  l'auteur, que la conversion WebAudioFont perd.
+- Encodage Opus 128 kbit/s stéréo, environ 9 Mo par kit. Les classes
+  exclusives du SF2 (charley ouvert/fermé/pédale…) deviennent des `group`/`offBy` smplr.
+- `preset.json` reprend le mix d'origine. `preset-ride.json` utilise les mêmes
+  fichiers, avec le ride à +12 dB et le charley à +6 dB. Le ride est copié sur
+  les touches 59 et 90 (RIDE_VOICE_KEYS).
+
+Pour régénérer (scripts dans `generaluser-drums/_tools/`) :
+
+```
+python3 render_kit.py GeneralUser-GS.sf2 32 jazz  "GeneralUser GS Jazz Kit"  /local-sounds/generaluser-drums/jazz
+python3 render_kit.py GeneralUser-GS.sf2 40 brush "GeneralUser GS Brush Kit" /local-sounds/generaluser-drums/brush
+python3 balance.py jazz/preset.json jazz/preset-ride.json   # idem brush
+python3 ride_voices.py */preset*.json
+```
+
+Supprimer ensuite les dossiers `_render/`. `calibrate.py` compare le niveau au
+kit jazz actuel ; c'est cette mesure qui donne les `trim` de bandInstruments.ts.

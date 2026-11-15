@@ -8,6 +8,20 @@ import { Instrument } from 'smplr';
 export const SALAMANDER_PRESET_URL = '/local-sounds/salamander/preset.json';
 export const SALAMANDER_CREDIT = 'Salamander Grand Piano V3, Alexander Holm (CC-BY 3.0)';
 
+/**
+ * GeneralUser GS v2.0.3 drum kits (S. Christian Collins, GeneralUser GS
+ * License v2.0), rendered hit by hit with FluidSynth from the original .sf2
+ * (velocity layers, layered samples and filters as the author programmed them),
+ * Opus files + smplr preset. `preset.json`: the kit's own mix; `preset-ride.json`:
+ * the same samples with the ride +12 dB and the hi-hat +6 dB.
+ */
+export const GU_DRUMS_URL = {
+  jazz: '/local-sounds/generaluser-drums/jazz/preset.json',
+  jazzRide: '/local-sounds/generaluser-drums/jazz/preset-ride.json',
+  brush: '/local-sounds/generaluser-drums/brush/preset.json',
+  brushRide: '/local-sounds/generaluser-drums/brush/preset-ride.json',
+} as const;
+
 /** A smplr instrument from a preset JSON URL (velocity layers, key zones). */
 export const LocalInstrument = Instrument<{ url: string }>((ctx, options, smplr) =>
   fetch(options.url)

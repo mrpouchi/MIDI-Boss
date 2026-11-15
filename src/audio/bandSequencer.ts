@@ -377,8 +377,9 @@ async function createVoice(ctx: AudioContext, option: SoundOption, program: numb
     } catch {
       instrument.dispose();
       trim.disconnect();
-      // A local instrument whose files are missing: the online grand piano.
-      if (source.kind === 'local') {
+      // A local instrument whose files are missing: the online grand piano
+      // (drums fall through to the default jazz kit below).
+      if (source.kind === 'local' && channel !== DRUM_CHANNEL) {
         return createVoice(ctx, { id: 'piano-splendid', label: '', source: { engine: 'smplr', kind: 'splendid', trim: 0.155 } }, program, channel, gain);
       }
     }

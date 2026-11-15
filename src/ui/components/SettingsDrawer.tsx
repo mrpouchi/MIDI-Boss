@@ -6,6 +6,7 @@ import { INSTRUMENTS, pianoSynth } from '../../audio/synth';
 import { MidiRawListener } from '../../input/midi';
 import { MidiState } from '../../input/types';
 import { MidiMonitor } from './MidiMonitor';
+import { SoundTestPanel } from './SoundTestPanel';
 import { AppSettings, InstrumentId } from '../../storage/types';
 
 interface SettingsDrawerProps {
@@ -43,6 +44,7 @@ export function SettingsDrawer({
     [onUpdateSettings],
   );
   const [confirmReset, setConfirmReset] = useState(false);
+  const [soundTestOpen, setSoundTestOpen] = useState(false);
   const [instrumentStatus, setInstrumentStatus] = useState(() =>
     pianoSynth.getInstrumentStatus(),
   );
@@ -64,11 +66,13 @@ export function SettingsDrawer({
       return;
     }
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (soundTestOpen) setSoundTestOpen(false);
+      else onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, soundTestOpen]);
 
   if (!isOpen) return null;
 
@@ -82,6 +86,8 @@ export function SettingsDrawer({
           : 'Aucun clavier MIDI détecté';
 
   return (
+    <>
+    {soundTestOpen && <SoundTestPanel onClose={() => setSoundTestOpen(false)} />}
     <div
       className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs"
       role="dialog"
@@ -235,6 +241,13 @@ export function SettingsDrawer({
                   Grand piano Salamander : Yamaha C5, 8 nuances, fichiers locaux (local-sounds/) — Alexander Holm, CC-BY 3.0. Absent ? Le Splendid Grand Piano (en ligne) prend le relais. Autres sons : MIDI.js MusyngKite.
                   Le synthé de secours prend le relais pendant le chargement.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setSoundTestOpen(true)}
+                  className="mt-2 w-full rounded-lg border-2 border-line px-3 py-2 text-sm font-semibold text-text hover:bg-stone-200/70"
+                >
+                  Tester les sons du groupe sur un morceau
+                </button>
                 {latency && (
                   <p className="mt-1 text-[11px] text-muted">
                     Touche → son : ~{Math.round(latency.keyToSoundMs)} ms (sortie audio{' '}
@@ -389,5 +402,6 @@ export function SettingsDrawer({
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -14,13 +14,13 @@
  * around −44 dB, smplr instruments 9 to 20 dB louder).
  */
 
-import { SALAMANDER_PRESET_URL } from './localSounds';
+import { GU_DRUMS_URL, SALAMANDER_PRESET_URL } from './localSounds';
 
 export type Family = 'piano' | 'bass' | 'sax' | 'trumpet' | 'brass' | 'guitar' | 'organ' | 'drums' | 'other';
 
 export type SoundSource =
   | { engine: 'smplr'; kind: 'splendid'; trim: number }
-  /** An instrument in local-sounds/ (git-ignored): falls back to Splendid when absent. */
+  /** An instrument in local-sounds/ (git-ignored): falls back to Splendid (drums: the jazz kit) when absent. */
   | { engine: 'smplr'; kind: 'local'; url: string; trim: number }
   | { engine: 'smplr'; kind: 'smolken'; instrument: string; trim: number }
   | { engine: 'smplr'; kind: 'versilian'; instrument: string; trim: number }
@@ -98,6 +98,12 @@ export const SOUND_LIBRARY: Record<Family, SoundOption[]> = {
     { id: 'drums-jazz-arachno', label: 'Jazz (Arachno)', source: { engine: 'webaudiofont', drumKit: '1285_Arachno' } },
     { id: 'drums-jazz-gu', label: 'Jazz (GeneralUser)', source: { engine: 'webaudiofont', drumKit: '1284_GeneralUserGS' } },
     { id: 'drums-room', label: 'Batterie de studio (FluidR3)', source: { engine: 'webaudiofont', drumKit: '12812_FluidR3' } },
+    // GeneralUser GS 2.0.3 rendered from the original .sf2 (local-sounds/, see localSounds.ts).
+    // Trims measured offline against drums-jazz (RMS over 2 s, velocity 94).
+    { id: 'drums-gu2-jazz', label: 'Jazz GeneralUser 2.0, mix d’origine (test)', source: { engine: 'smplr', kind: 'local', url: GU_DRUMS_URL.jazz, trim: 0.3 } },
+    { id: 'drums-gu2-jazz-ride', label: 'Jazz GeneralUser 2.0, ride en avant (test)', source: { engine: 'smplr', kind: 'local', url: GU_DRUMS_URL.jazzRide, trim: 0.25 } },
+    { id: 'drums-gu2-brush', label: 'Balais GeneralUser 2.0, mix d’origine (test)', source: { engine: 'smplr', kind: 'local', url: GU_DRUMS_URL.brush, trim: 0.35 } },
+    { id: 'drums-gu2-brush-ride', label: 'Balais GeneralUser 2.0, ride en avant', source: { engine: 'smplr', kind: 'local', url: GU_DRUMS_URL.brushRide, trim: 0.28 } },
   ],
   other: [waf('other-airfont', 'AirFont 380', 'AirFont380'), waf('other-fluid', 'FluidR3', 'FluidR3'), waf('other-gu', 'GeneralUser', 'GeneralUserGS')],
 };
@@ -134,16 +140,29 @@ export function partLabel(program: number, channel: number): string {
   return GM_NAMES_FR[program] ?? 'Instrument';
 }
 
+/**
+ * Default sound of each family, picked by ear on the sound bench (2026-11-15).
+ * Families not listed default to their first library sound.
+ */
+const FAMILY_DEFAULT: Partial<Record<Family, string>> = {
+  sax: 'sax-vcsl-straight',
+  brass: 'brass-gu',
+  drums: 'drums-gu2-brush-ride',
+};
+
+const byId = (family: Family, id: string) => SOUND_LIBRARY[family].find((o) => o.id === id)!;
+
 /** Default sound of a part: the best sampled instrument when there is one. */
 export function defaultSound(program: number, channel: number): SoundOption {
   const family = familyOf(program, channel);
   if (family === 'bass' && program !== 32) {
     // An electric bass part keeps an electric bass by default.
-    return SOUND_LIBRARY.bass.find((o) => o.id === (program === 35 ? 'bass-fretless' : 'bass-jazz'))!;
+    return byId('bass', program === 35 ? 'bass-fretless' : 'bass-finger');
   }
-  if (family === 'piano' && (program === 4 || program === 5)) return SOUND_LIBRARY.piano.find((o) => o.id === 'piano-rhodes')!;
-  if (family === 'trumpet' && program === 59) return SOUND_LIBRARY.trumpet.find((o) => o.id === 'tp-muted')!;
-  return SOUND_LIBRARY[family][0];
+  if (family === 'piano' && (program === 4 || program === 5)) return byId('piano', 'piano-rhodes');
+  if (family === 'trumpet' && program === 59) return byId('trumpet', 'tp-muted');
+  const preferred = FAMILY_DEFAULT[family];
+  return preferred ? byId(family, preferred) : SOUND_LIBRARY[family][0];
 }
 
 /** The sound picked for a part (falls back to the default if the id is unknown). */
