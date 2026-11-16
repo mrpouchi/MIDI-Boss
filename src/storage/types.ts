@@ -31,6 +31,8 @@ export interface AppSettings {
   melodyLearned?: Record<string, number[]>;
   /** Length (bars) of the loop used to learn a melody bit by bit. */
   melodyLoopBars?: number;
+  /** A silent bar (metronome only) after each pass of that loop. */
+  melodyLoopRest?: boolean;
 }
 
 export interface ChordStat {

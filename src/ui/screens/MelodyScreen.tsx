@@ -189,6 +189,9 @@ export function MelodyScreen(props: MelodyScreenProps) {
   const loopBars = settings.melodyLoopBars ?? DEFAULT_SECTION_BARS;
   const loopBarsRef = useRef(loopBars);
   loopBarsRef.current = loopBars;
+  const loopRest = settings.melodyLoopRest ?? false;
+  const loopRestRef = useRef(loopRest);
+  loopRestRef.current = loopRest;
   const learnedBars = useMemo(() => settings.melodyLearned?.[songKey] ?? [], [settings.melodyLearned, songKey]);
   const learnedRef = useRef(learnedBars);
   learnedRef.current = learnedBars;
@@ -377,7 +380,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
     silenceGuide();
     guideCursorRef.current.lastMs = -Infinity;
     backing.pause();
-    backing.setLoop({ fromMs: sec.fromMs, toMs: sec.toMs });
+    backing.setLoop({ fromMs: sec.fromMs, toMs: sec.toMs, restMs: loopRestRef.current ? prepared.timeline.barMs : 0 });
     await backing.resumeAt(sec.fromMs, prepared.timeline.barMs, prepared.timeline.beatsPerBar);
   };
 
@@ -549,6 +552,14 @@ export function MelodyScreen(props: MelodyScreenProps) {
     void enterSection(secs[sectionOfBar(secs, current.fromBar)]);
   };
 
+  /** A bar of silence after each pass, or not: the loop starts again from its section. */
+  const changeLoopRest = (rest: boolean) => {
+    onUpdateSettings({ melodyLoopRest: rest });
+    loopRestRef.current = rest;
+    const current = sectionRef.current;
+    if (phase === 'running' && modeRef.current === 'learn' && current) void enterSection(current);
+  };
+
   const ready = prepared !== null;
   const noMelody = raw !== null && melodyChannel === null;
 
@@ -599,11 +610,13 @@ export function MelodyScreen(props: MelodyScreenProps) {
 
     if (mode === 'learn' && section) {
       const len = section.toMs - section.fromMs;
+      const restMs = loopRest ? timeline.barMs : 0;
+      const period = len + restMs;
       // Same lead as the band's pass count: the last instants already show the next pass.
-      const current = linearMs < section.fromMs ? 0 : Math.max(0, Math.floor((linearMs - section.fromMs + LOOP_LEAD_MS) / len));
+      const current = linearMs < section.fromMs ? 0 : Math.max(0, Math.floor((linearMs - section.fromMs + LOOP_LEAD_MS) / period));
       const out: { notes: FallingNote[]; bars: FallingBar[] } = { notes: [], bars: [] };
       for (let q = Math.max(0, current - 1); q <= current + 2; q++) {
-        const shift = q * len;
+        const shift = q * period;
         // Pass 0 is heard; then the band's passes are played (the current one live, the last one judged).
         const listening = q === 0 || (q === current && stage === 'listen');
         for (const n of section.notes) {
@@ -619,6 +632,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
           out.notes.push({ key: `${q}-${n.index}`, midi: n.midi, startMs: n.startMs + shift, durationMs, state });
         }
         for (let b = section.fromBar; b < section.toBar; b++) out.bars.push(barAt(b, shift, `${q}-${b}`, b === section.fromBar && q > 0));
+        if (restMs > 0) out.bars.push({ key: `${q}-rest`, ms: section.toMs + shift, number: 0, chords: [], rest: { durationMs: restMs } });
       }
       return out;
     }
@@ -633,7 +647,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
       })),
       bars: Array.from({ length: timeline.formBars }, (_, b) => barAt(b, 0, String(b))),
     };
-  }, [timeline, notes, mode, section, linearMs, stage, resultByIndex, lastPassByIndex, nextNote?.index, notation]);
+  }, [timeline, notes, mode, section, linearMs, stage, resultByIndex, lastPassByIndex, nextNote?.index, notation, loopRest]);
 
   const advice = (() => {
     if (!summary || summary.total === 0) return 'Aucune note de la mélodie n’a été jouée : relancez quand vous êtes prêt.';
@@ -757,7 +771,10 @@ export function MelodyScreen(props: MelodyScreenProps) {
                     ))}
                   </div>
                 </fieldset>
-                <LoopLengthPicker value={loopBars} onChange={changeLoopBars} />
+                <div>
+                  <LoopLengthPicker value={loopBars} onChange={changeLoopBars} />
+                  <RestToggle className="mt-2" value={loopRest} onChange={changeLoopRest} />
+                </div>
               </div>
               <label className="flex items-center gap-3 font-bold">
                 <input type="checkbox" checked={showKeys} onChange={(e) => setShowKeys(e.target.checked)} className="h-5 w-5 accent-sky" />
@@ -828,6 +845,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
                       <ChevronRight className="h-5 w-5" />
                     </button>
                     <LoopLengthPicker compact value={loopBars} onChange={changeLoopBars} />
+                    <RestToggle compact value={loopRest} onChange={changeLoopRest} />
                   </div>
                 </div>
               ) : (
@@ -1073,6 +1091,20 @@ function LoopLengthPicker({ value, onChange, compact = false }: { value: number;
         ))}
       </div>
     </fieldset>
+  );
+}
+
+function RestToggle({ value, onChange, compact = false, className = '' }: { value: boolean; onChange: (rest: boolean) => void; compact?: boolean; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={value}
+      onClick={() => onChange(!value)}
+      title="Une mesure de silence après chaque tour de boucle (le métronome garde le tempo)"
+      className={`mb-btn mb-btn-sm ${value ? 'mb-btn-sky' : 'mb-btn-ghost'} ${className}`}
+    >
+      {compact ? '+ silence' : '+ 1 mesure de silence'}
+    </button>
   );
 }
 

@@ -151,7 +151,7 @@ export class BandSequencer {
   private clicks: { time: number; accent: boolean }[] = [];
   private nextClick = 0;
   /** Section played over and over (file seconds), or null. */
-  private loop: { fromS: number; toS: number } | null = null;
+  private loop: { fromS: number; toS: number; restS?: number; restBeats?: number } | null = null;
   /** Seconds added to note times for the current pass through the loop. */
   private loopOffset = 0;
 
@@ -245,7 +245,7 @@ export class BandSequencer {
    * Plays the section [fromS, toS) over and over, seamlessly: the next pass is
    * queued ahead like any other notes. Set it before start(); null = no loop.
    */
-  setLoop(loop: { fromS: number; toS: number } | null): void {
+  setLoop(loop: { fromS: number; toS: number; restS?: number; restBeats?: number } | null): void {
     this.loop = loop && loop.toS > loop.fromS ? loop : null;
   }
 
@@ -289,7 +289,16 @@ export class BandSequencer {
       if (loop && (this.next >= schedule.notes.length || schedule.notes[this.next].time >= loop.toS - 0.001)) {
         // End of the section: the next pass starts right where this one ends.
         if (this.startAt + this.loopOffset + loop.toS > horizon) break;
-        this.loopOffset += loop.toS - loop.fromS;
+        const restS = Math.max(0, loop.restS ?? 0);
+        if (restS > 0) {
+          // A silent bar between passes: only the metronome keeps the pulse.
+          const beats = Math.max(1, loop.restBeats ?? 4);
+          for (let b = 0; b < beats; b++) {
+            const when = this.startAt + this.loopOffset + loop.toS + (b * restS) / beats;
+            if (when >= now - MAX_LATE_S) metronomeClick(this.ctx, this.ctx.destination, when, b === 0);
+          }
+        }
+        this.loopOffset += loop.toS - loop.fromS + restS;
         this.next = firstNoteAt(schedule.notes, loop.fromS);
         continue;
       }

@@ -177,7 +177,16 @@ export class BackingTrack {
    */
   setLoop(loop: LoopSpan | null): void {
     this.loop = loop && loop.toMs > loop.fromMs ? loop : null;
-    this.band.setLoop(this.loop ? { fromS: this.loop.fromMs / 1000, toS: this.loop.toMs / 1000 } : null);
+    this.band.setLoop(
+      this.loop
+        ? {
+            fromS: this.loop.fromMs / 1000,
+            toS: this.loop.toMs / 1000,
+            restS: (this.loop.restMs ?? 0) / 1000,
+            restBeats: this.analysis?.beatsPerBar,
+          }
+        : null,
+    );
   }
 
   /**

@@ -30,3 +30,18 @@ describe('loopPassAt', () => {
     expect(loopPassAt(13000, loop)).toBe(2);
   });
 });
+
+describe('loop with a rest after each pass', () => {
+  const rested = { fromMs: 2000, toMs: 6000, restMs: 2000 }; // 4 s section + 2 s of silence
+  it('runs past the section during the rest, then comes back round', () => {
+    expect(foldLoop(5000, rested)).toBe(5000);
+    expect(foldLoop(7000, rested)).toBe(7000);
+    expect(foldLoop(8000, rested)).toBe(2000);
+    expect(foldLoop(7900, rested, 250)).toBe(1900);
+  });
+  it('counts a pass once the rest is over', () => {
+    expect(loopPassAt(7000, rested)).toBe(0);
+    expect(loopPassAt(8000, rested)).toBe(1);
+    expect(loopPassAt(14000, rested)).toBe(2);
+  });
+});

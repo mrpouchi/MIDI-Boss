@@ -27,6 +27,8 @@ export interface FallingBar {
   chords: { ms: number; label: string }[];
   /** The loop starts again here. */
   loopStart?: boolean;
+  /** A bar of silence (only the metronome): no chord, shaded. */
+  rest?: { durationMs: number };
 }
 
 interface FallingNotesProps {
@@ -112,6 +114,14 @@ export function FallingNotes(props: FallingNotesProps) {
           .filter((b) => inView(b.ms) || b.chords.some((c) => inView(c.ms)))
           .map((b) => (
             <div key={b.key} aria-hidden="true">
+              {b.rest && (
+                <span
+                  className="absolute inset-x-0 grid place-items-center bg-mist/80 font-display text-sm font-bold tracking-wide text-muted uppercase"
+                  style={{ bottom: `${h(b.ms)}%`, height: `${(b.rest.durationMs / lookaheadMs) * 100}%` }}
+                >
+                  Silence · le métronome compte
+                </span>
+              )}
               <span
                 className={`absolute inset-x-0 ${b.loopStart ? 'h-1 bg-sky' : 'h-0.5 bg-text/35'}`}
                 style={{ bottom: `${h(b.ms)}%` }}
@@ -120,7 +130,7 @@ export function FallingNotes(props: FallingNotesProps) {
                 className="absolute right-2 font-display text-xs font-bold text-muted"
                 style={{ bottom: `calc(${h(b.ms)}% + 4px)` }}
               >
-                {b.loopStart ? '↻ ' : ''}Mesure {b.number}
+                {b.rest ? '' : `${b.loopStart ? '↻ ' : ''}Mesure ${b.number}`}
               </span>
               {b.chords.map((c, i) => (
                 <span key={i}>
