@@ -27,6 +27,10 @@ export interface AppSettings {
   bandMuted?: Record<string, number[]>;
   /** Key chosen per song: song title key → semitones from the written key (−5 … +6). */
   songTranspose?: Record<string, number>;
+  /** Melody bars learned per song: song title key → form bars (0-based). */
+  melodyLearned?: Record<string, number[]>;
+  /** Length (bars) of the loop used to learn a melody bit by bit. */
+  melodyLoopBars?: number;
 }
 
 export interface ChordStat {
