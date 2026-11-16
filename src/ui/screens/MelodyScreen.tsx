@@ -101,7 +101,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
   const [melodyGuide, setMelodyGuide] = useState(false);
   const melodyGuideRef = useRef(false);
   melodyGuideRef.current = melodyGuide;
-  const guideCursorRef = useRef({ lastMs: -Infinity, sounding: new Map<number, number>() });
+  const guideCursorRef = useRef({ lastMs: -Infinity, sounding: new Map<number, { timer: number; release: () => void }>() });
 
   const backingRef = useRef<BackingTrack | null>(null);
   const scorerRef = useRef<MelodyScorer | null>(null);
@@ -183,9 +183,9 @@ export function MelodyScreen(props: MelodyScreenProps) {
   /** Releases every note the melody guide is holding. */
   const silenceGuide = () => {
     const { sounding } = guideCursorRef.current;
-    for (const [midi, timer] of sounding) {
+    for (const { timer, release } of sounding.values()) {
       window.clearTimeout(timer);
-      pianoSynth.noteOff(midi);
+      release();
     }
     sounding.clear();
   };
@@ -198,17 +198,18 @@ export function MelodyScreen(props: MelodyScreenProps) {
     if (!melodyGuideRef.current || audioMs < from) return;
     for (const n of notes) {
       if (n.startMs <= from || n.startMs > audioMs) continue;
+      // Its own voice: never cuts (nor is cut by) the learner's key.
       const previous = cursor.sounding.get(n.midi);
-      if (previous !== undefined) {
-        window.clearTimeout(previous);
-        pianoSynth.noteOff(n.midi);
+      if (previous) {
+        window.clearTimeout(previous.timer);
+        previous.release();
       }
-      pianoSynth.noteOn(n.midi, 84);
+      const release = pianoSynth.playDetached(n.midi, 84);
       const timer = window.setTimeout(() => {
         cursor.sounding.delete(n.midi);
-        pianoSynth.noteOff(n.midi);
+        release();
       }, Math.max(80, n.durationMs - 20));
-      cursor.sounding.set(n.midi, timer);
+      cursor.sounding.set(n.midi, { timer, release });
     }
   };
 

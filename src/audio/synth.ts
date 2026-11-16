@@ -348,6 +348,33 @@ class PianoSynthEngine {
     return this.ctx;
   }
 
+  /**
+   * A note outside the learner's keys (e.g. the tune played for them): it never
+   * stops, nor is stopped by, a note the learner plays at the same pitch.
+   * Returns the function that releases it.
+   */
+  playDetached(midi: number, velocity = 96): () => void {
+    if (!this.enabled) return () => undefined;
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return () => undefined;
+    if (this.instrument && this.instrumentStatus.state === 'ready') {
+      try {
+        const stop = this.instrument.start({ note: midi, velocity });
+        return () => {
+          try {
+            stop();
+          } catch {
+            // Voix déjà terminée.
+          }
+        };
+      } catch {
+        // Retombe sur le synthé à oscillateurs.
+      }
+    }
+    const voice = this.startOscillatorVoice(ctx, this.masterGain, midi, velocity);
+    return () => this.releaseOscillatorVoice(voice);
+  }
+
   noteOn(midi: number, velocity = 96): void {
     if (!this.enabled) return;
     const ctx = this.ensureContext();
@@ -368,6 +395,10 @@ class PianoSynthEngine {
       }
     }
 
+    this.voices.set(midi, this.startOscillatorVoice(ctx, this.masterGain, midi, velocity));
+  }
+
+  private startOscillatorVoice(ctx: AudioContext, out: GainNode, midi: number, velocity: number): ActiveVoice {
     const now = ctx.currentTime;
     const freq = midiToFrequency(midi);
     const velScale = Math.max(0.25, Math.min(1, velocity / 127));
@@ -398,12 +429,26 @@ class PianoSynthEngine {
     osc2.connect(subGain);
     subGain.connect(filter);
     filter.connect(gain);
-    gain.connect(this.masterGain);
+    gain.connect(out);
 
     osc1.start(now);
     osc2.start(now);
 
-    this.voices.set(midi, { osc1, osc2, gain, filter });
+    return { osc1, osc2, gain, filter };
+  }
+
+  private releaseOscillatorVoice(voice: ActiveVoice): void {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      voice.osc1.stop(now + 0.16);
+      voice.osc2.stop(now + 0.16);
+    } catch {
+      // Ignore already stopped oscillators
+    }
   }
 
   noteOff(midi: number): void {
@@ -418,18 +463,8 @@ class PianoSynthEngine {
     }
 
     const voice = this.voices.get(midi);
-    if (!voice || !this.ctx) return;
-
-    const now = this.ctx.currentTime;
-    try {
-      voice.gain.gain.cancelScheduledValues(now);
-      voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
-      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-      voice.osc1.stop(now + 0.16);
-      voice.osc2.stop(now + 0.16);
-    } catch {
-      // Ignore already stopped oscillators
-    }
+    if (!voice) return;
+    this.releaseOscillatorVoice(voice);
     this.voices.delete(midi);
   }
 
