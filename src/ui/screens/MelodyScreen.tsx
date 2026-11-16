@@ -1,4 +1,4 @@
-import { Headphones, Play, RotateCcw, X } from 'lucide-react';
+import { Headphones, Music, Play, RotateCcw, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackingTrack } from '../../audio/backingTrack';
 import { stopAudition } from '../../audio/bandSequencer';
@@ -97,6 +97,11 @@ export function MelodyScreen(props: MelodyScreenProps) {
   const [lastRun, setLastRun] = useState<PlayAlongRun | null>(null);
   const [completed, setCompleted] = useState(false);
   const [showKeys, setShowKeys] = useState(true);
+  // Hear the tune on the learner's own piano sound while playing it (not scored).
+  const [melodyGuide, setMelodyGuide] = useState(false);
+  const melodyGuideRef = useRef(false);
+  melodyGuideRef.current = melodyGuide;
+  const guideCursorRef = useRef({ lastMs: -Infinity, sounding: new Map<number, number>() });
 
   const backingRef = useRef<BackingTrack | null>(null);
   const scorerRef = useRef<MelodyScorer | null>(null);
@@ -172,7 +177,45 @@ export function MelodyScreen(props: MelodyScreenProps) {
   const stopFrame = () => {
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
+    silenceGuide();
   };
+
+  /** Releases every note the melody guide is holding. */
+  const silenceGuide = () => {
+    const { sounding } = guideCursorRef.current;
+    for (const [midi, timer] of sounding) {
+      window.clearTimeout(timer);
+      pianoSynth.noteOff(midi);
+    }
+    sounding.clear();
+  };
+
+  /** Plays, on the learner's piano sound, the tune notes the band just reached. */
+  const playGuide = (notes: MelodyNote[], audioMs: number) => {
+    const cursor = guideCursorRef.current;
+    const from = cursor.lastMs;
+    cursor.lastMs = audioMs;
+    if (!melodyGuideRef.current || audioMs < from) return;
+    for (const n of notes) {
+      if (n.startMs <= from || n.startMs > audioMs) continue;
+      const previous = cursor.sounding.get(n.midi);
+      if (previous !== undefined) {
+        window.clearTimeout(previous);
+        pianoSynth.noteOff(n.midi);
+      }
+      pianoSynth.noteOn(n.midi, 84);
+      const timer = window.setTimeout(() => {
+        cursor.sounding.delete(n.midi);
+        pianoSynth.noteOff(n.midi);
+      }, Math.max(80, n.durationMs - 20));
+      cursor.sounding.set(n.midi, timer);
+    }
+  };
+
+  // Turning the guide off mid-run cuts the notes still sounding.
+  useEffect(() => {
+    if (!melodyGuide) silenceGuide();
+  }, [melodyGuide]);
 
   useEffect(
     () => () => {
@@ -270,8 +313,10 @@ export function MelodyScreen(props: MelodyScreenProps) {
       const ok = await backing.start();
       if (!ok) throw new Error('Le navigateur a bloqué le son. Cliquez à nouveau.');
       setPhase('running');
+      guideCursorRef.current.lastMs = -Infinity;
       const frame = () => {
         backing.sync();
+        if (modeRef.current === 'play') playGuide(prepared.notes, backing.songMs(performance.now()) ?? 0);
         const now = backing.songMs(performance.now(), latencyRef.current) ?? 0;
         const fresh = scorerRef.current?.advance(now) ?? [];
         if (fresh.length) setResults((prev) => [...prev, ...fresh]);
@@ -529,6 +574,17 @@ export function MelodyScreen(props: MelodyScreenProps) {
                 <Play className="h-5 w-5 fill-current" /> Jouer la mélodie
               </button>
             </>
+          )}
+          {(phase === 'discover' || phase === 'done' || ((phase === 'running' || phase === 'loading') && mode === 'play')) && (
+            <button
+              type="button"
+              onClick={() => setMelodyGuide((v) => !v)}
+              aria-pressed={melodyGuide}
+              title="Entendre la mélodie au piano pendant que vous jouez (sans effet sur le score)"
+              className={`mb-btn ${melodyGuide ? 'mb-btn-green' : 'mb-btn-ghost'}`}
+            >
+              <Music className="h-5 w-5" /> Mélodie au piano : {melodyGuide ? 'oui' : 'non'}
+            </button>
           )}
           {(phase === 'running' || phase === 'loading') && (
             <button type="button" onClick={() => void finish(false)} className="mb-btn mb-btn-ghost">
