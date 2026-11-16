@@ -255,7 +255,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
    * `force`: even with the guide off (a section's listening pass). `loopFromMs`:
    * when the band comes back round, the notes from the loop's start sound again.
    */
-  const playGuide = (notes: MelodyNote[], audioMs: number, opts: { force?: boolean; loopFromMs?: number } = {}) => {
+  const playGuide = (notes: MelodyNote[], audioMs: number, opts: { force?: boolean; loopFromMs?: number; loopToMs?: number } = {}) => {
     const cursor = guideCursorRef.current;
     let from = cursor.lastMs;
     cursor.lastMs = audioMs;
@@ -276,7 +276,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
       const timer = window.setTimeout(() => {
         cursor.sounding.delete(n.midi);
         release();
-      }, Math.max(80, n.durationMs - 20));
+      }, Math.max(80, Math.min(n.durationMs, (opts.loopToMs ?? Infinity) - n.startMs) - 20));
       cursor.sounding.set(n.midi, { timer, release });
     }
   };
@@ -495,7 +495,7 @@ export function MelodyScreen(props: MelodyScreenProps) {
             const fresh = scorerRef.current?.advance(at) ?? [];
             if (fresh.length) setResults((prev) => [...prev, ...fresh.map((r) => ({ ...r, index: sec.notes[r.index].index }))]);
           }
-          if (sec) playGuide(sec.notes, backing.songMs(now) ?? 0, { force: stageRef.current === 'listen', loopFromMs: sec.fromMs });
+          if (sec) playGuide(sec.notes, backing.songMs(now) ?? 0, { force: stageRef.current === 'listen', loopFromMs: sec.fromMs, loopToMs: sec.toMs });
           setLinearMs(linear);
           setSongMs(at);
           if (!finishedRef.current) rafRef.current = requestAnimationFrame(frame);
@@ -614,7 +614,9 @@ export function MelodyScreen(props: MelodyScreenProps) {
               : q === current - 1
                 ? stateOf(n, lastPassByIndex, false)
                 : 'upcoming';
-          out.notes.push({ key: `${q}-${n.index}`, midi: n.midi, startMs: n.startMs + shift, durationMs: n.durationMs, state });
+          // A note held past the loop's end is cut there: it never overlaps the next pass.
+          const durationMs = Math.min(n.durationMs, section.toMs - n.startMs);
+          out.notes.push({ key: `${q}-${n.index}`, midi: n.midi, startMs: n.startMs + shift, durationMs, state });
         }
         for (let b = section.fromBar; b < section.toBar; b++) out.bars.push(barAt(b, shift, `${q}-${b}`, b === section.fromBar && q > 0));
       }
